@@ -31,7 +31,9 @@ public class DocumentController {
             @RequestParam("kbId") Long kbId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "userId", required = false) String userId) {
-        return Result.success(documentService.upload(kbId, file, userId));
+        Long docId = documentService.upload(kbId, file, userId);
+        documentService.parseAsync(docId);
+        return Result.success(docId);
     }
 
     @Operation(summary = "获取文档处理进度")

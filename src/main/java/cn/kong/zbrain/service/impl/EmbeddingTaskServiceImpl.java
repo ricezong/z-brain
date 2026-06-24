@@ -131,6 +131,7 @@ public class EmbeddingTaskServiceImpl implements EmbeddingTaskService {
         int chunkCount = chunkMapper.countByDocId(document.getId());
         documentMapper.updateChunkCount(document.getId(), chunkCount);
         documentMapper.updateStatus(document.getId(), DocumentStatus.SUCCESS.getCode(), null);
+        document.setChunkCount(chunkCount);
         updateProgress(document, 100, DocumentStatus.SUCCESS);
     }
 

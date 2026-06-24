@@ -2,11 +2,16 @@ server:
   port: 8080
   servlet:
     context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
   tomcat:
     max-threads: 200
     accept-count: 100
     max-connections: 8192
     connection-timeout: 30000
+    uri-encoding: UTF-8
 
 spring:
   application:
@@ -89,12 +94,12 @@ zbrain:
     embedding-ttl: 604800         # 7 天
   # 百炼 SDK 配置
   dashscope:
-    base-url: https://ws-guwaqc43qlwprv9e.ap-southeast-1.maas.aliyuncs.com/api/v1
-    api-key: sk-ws-H.LMPEPP.wLIJ.MEQCIAxwAqXqGXZKd9RWrggo7IW4XP2eplLZRNE8VQYQOs4DAiAJEPjSlZxfToSs0vQrWHW_uE0LuU2RnmnQ9FbNA_O3_w
+    base-url: https://llm-zpa4xzq09gstj9xb.cn-beijing.maas.aliyuncs.com/api/v1
+    api-key: sk-ws-H.RYHDILP.oVEN.MEUCIQDvqfKy2fuPqF0WNGLFJ34-Gf1NRBKQKkslPej-CvpLHQIgQo7tH-VvR9DdoC3zYA3XnXrG5tMHB9sUnjCloROo-UA
     embedding-model: text-embedding-v4
     rerank-model: qwen3-rerank
-    # 批量向量化每批最大条数
-    embedding-batch-size: 25
+    # 批量向量化每批最大条数（百炼 API 限制最多 10 条）
+    embedding-batch-size: 10
     # 超时（毫秒）
     timeout: 60000
     # 重试次数

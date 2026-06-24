@@ -30,14 +30,20 @@ public class VectorRetriever implements Retriever {
     public List<RetrievalResult> retrieve(Long kbId, String query, int topK) {
         try {
             // 1. 将查询文本向量化
+            log.info("向量检索开始: kbId={}, queryLen={}, queryPreview={}",
+                    kbId, query != null ? query.length() : 0,
+                    query != null ? query.substring(0, Math.min(query.length(), 80)) : "null");
             String vectorStr = embeddingService.embed(query);
             if (vectorStr == null) {
                 log.warn("查询向量化失败，跳过向量检索");
                 return new ArrayList<>();
             }
+            log.info("查询向量化完成: vectorLen={}, vectorPreview={}...",
+                    vectorStr.length(), vectorStr.substring(0, Math.min(vectorStr.length(), 60)));
 
             // 2. 调用 Mapper 执行向量相似度检索
             List<Chunk> chunks = chunkMapper.vectorRetrieve(kbId, vectorStr, topK);
+            log.info("向量检索结果: kbId={}, 命中={}条", kbId, chunks.size());
 
             // 3. 转换为 RetrievalResult
             List<RetrievalResult> results = new ArrayList<>();

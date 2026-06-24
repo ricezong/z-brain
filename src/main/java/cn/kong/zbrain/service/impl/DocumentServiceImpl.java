@@ -19,6 +19,7 @@ import cn.kong.zbrain.mapper.DocumentMapper;
 import cn.kong.zbrain.mapper.KnowledgeBaseMapper;
 import cn.kong.zbrain.parser.DocumentParser;
 import cn.kong.zbrain.service.DocumentService;
+import cn.kong.zbrain.service.EmbeddingTaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -58,6 +59,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentProgressCache progressCache;
     private final ZBrainProperties properties;
     private final ObjectMapper objectMapper;
+    private final EmbeddingTaskService embeddingTaskService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -76,7 +78,7 @@ public class DocumentServiceImpl implements DocumentService {
         // 3. 保存文件到本地
         String uploadDir = properties.getDocument().getUploadDir();
         String fileName = System.currentTimeMillis() + "_" + originalName;
-        Path filePath = Paths.get(uploadDir, fileName);
+        Path filePath = Paths.get(uploadDir, fileName).toAbsolutePath();
         try {
             Files.createDirectories(filePath.getParent());
             file.transferTo(filePath.toFile());
@@ -168,6 +170,8 @@ public class DocumentServiceImpl implements DocumentService {
             documentMapper.updateChunkCount(documentId, chunkCount);
             knowledgeBaseMapper.updateChunkCount(document.getKbId(), chunkCount);
 
+            // 同步 chunkCount 到 document 对象，确保进度缓存写入最新值
+            document.setChunkCount(chunkCount);
             updateProgress(document, 100, DocumentStatus.PENDING_REVIEW);
 
             long cost = System.currentTimeMillis() - startTime;
@@ -255,6 +259,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
         documentMapper.updateStatus(documentId, DocumentStatus.EMBEDDING.getCode(), null);
         updateProgress(document, 0, DocumentStatus.EMBEDDING);
+        embeddingTaskService.embedAsync(documentId);
         log.info("文档触发向量化: docId={}", documentId);
     }
 
@@ -319,7 +324,11 @@ public class DocumentServiceImpl implements DocumentService {
                 chunkCount - document.getChunkCount());
 
         documentMapper.updateStatus(documentId, DocumentStatus.EMBEDDING.getCode(), null);
+        document.setChunkCount(chunkCount);
         updateProgress(document, 0, DocumentStatus.EMBEDDING);
+
+        // 触发异步向量化
+        embeddingTaskService.embedAsync(documentId);
 
         log.info("审核提交完成: docId={}, chunkCount={}", documentId, chunkCount);
     }

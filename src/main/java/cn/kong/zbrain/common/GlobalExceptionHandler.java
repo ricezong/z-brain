@@ -1,5 +1,7 @@
 package cn.kong.zbrain.common;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindException;
@@ -62,8 +64,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public Result<Void> handleException(Exception e) {
+    public Result<Void> handleException(Exception e,
+                                         HttpServletRequest request,
+                                         HttpServletResponse response) {
         log.error("系统异常", e);
+        // SSE 流式响应已提交时，无法再写入 JSON，仅记录日志
+        if (response.isCommitted()
+                || "text/event-stream".equals(response.getContentType())) {
+            log.warn("SSE 流已提交，跳过 JSON 异常响应: {}", e.getMessage());
+            return null;
+        }
         return Result.error(500, "系统内部错误: " + e.getMessage());
     }
 }

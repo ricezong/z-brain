@@ -1,6 +1,7 @@
 package cn.kong.zbrain.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -13,7 +14,7 @@ public class ChatRequest {
     /** 会话 ID，为空则新建会话 */
     private String sessionId;
 
-    @NotBlank(message = "知识库 ID 不能为空")
+    @NotNull(message = "知识库 ID 不能为空")
     private Long kbId;
 
     @NotBlank(message = "问题不能为空")

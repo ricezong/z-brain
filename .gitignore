@@ -45,3 +45,5 @@ parsed/
 
 ### Application Properties ###
 application-local.yml
+/testdata/面试记录.xlsx
+/testdata/面试资料-20-29.pdf

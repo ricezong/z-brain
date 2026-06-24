@@ -8,6 +8,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * Web MVC 配置
  *
  * <p>配置 CORS 跨域、SSE 流式响应支持等。</p>
+ * <p>字符编码由 server.servlet.encoding.force=true 在 application.yml 中统一配置。</p>
  *
  * @author zbrain-team
  */

@@ -38,9 +38,9 @@ public class DashScopeConfig {
     private String rerankModel = "qwen3-rerank";
 
     /**
-     * 批量向量化每批最大条数（百炼 SDK 限制单次最多 25 条）
+     * 批量向量化每批最大条数（百炼 text-embedding-v4 API 限制单次最多 10 条）
      */
-    private int embeddingBatchSize = 25;
+    private int embeddingBatchSize = 10;
 
     /**
      * 调用超时时间（毫秒）

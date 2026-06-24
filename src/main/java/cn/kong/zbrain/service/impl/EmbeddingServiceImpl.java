@@ -32,6 +32,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class EmbeddingServiceImpl implements EmbeddingService {
 
+    /** 百炼 text-embedding API 单次请求最大文本条数（硬限制） */
+    private static final int MAX_API_BATCH_SIZE = 10;
+
     private final DashScopeConfig dashScopeConfig;
     private final EmbeddingCache embeddingCache;
 
@@ -87,7 +90,7 @@ public class EmbeddingServiceImpl implements EmbeddingService {
      */
     private Map<String, String> callDashScopeBatch(List<String> texts) {
         Map<String, String> textToVector = new HashMap<>();
-        int batchSize = dashScopeConfig.getEmbeddingBatchSize();
+        int batchSize = Math.min(dashScopeConfig.getEmbeddingBatchSize(), MAX_API_BATCH_SIZE);
 
         for (int i = 0; i < texts.size(); i += batchSize) {
             int end = Math.min(i + batchSize, texts.size());
@@ -146,7 +149,12 @@ public class EmbeddingServiceImpl implements EmbeddingService {
             return "[]";
         }
         StringBuilder sb = new StringBuilder("[");
-        vector.forEach(v -> sb.append(v).append(","));
+        for (int i = 0; i < vector.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(vector.get(i));
+        }
         sb.append("]");
         return sb.toString();
     }

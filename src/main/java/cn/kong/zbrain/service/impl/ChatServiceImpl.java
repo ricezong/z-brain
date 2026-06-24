@@ -414,10 +414,15 @@ public class ChatServiceImpl implements ChatService {
     }
 
     private void sendSseEvent(SseEmitter emitter, String eventName, Object data) {
+        if (data == null) {
+            data = "";
+        }
         try {
             emitter.send(SseEmitter.event().name(eventName).data(data));
         } catch (IOException e) {
             log.error("发送 SSE 事件失败", e);
+        } catch (IllegalStateException e) {
+            log.warn("SSE 连接已关闭，跳过事件: {}", eventName);
         }
     }
 
