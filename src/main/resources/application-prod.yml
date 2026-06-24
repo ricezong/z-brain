@@ -1,0 +1,33 @@
+# ==================== 生产环境配置 ====================
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${PG_HOST}:${PG_PORT}/${PG_DB}?stringtype=unspecified&reWriteBatchedInserts=true
+    username: ${PG_USER}
+    password: ${PG_PASSWORD}
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      idle-timeout: 30000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+      pool-name: ZBrainHikariPool
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      database: ${REDIS_DB:0}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 32
+          max-idle: 16
+          min-idle: 4
+          max-wait: 3000ms
+
+logging:
+  level:
+    root: INFO
+    com.zbrain: INFO

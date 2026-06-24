@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.kong.zbrain.mapper.ChunkMapper">
+
+    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.Chunk">
+        <id     column="id"               property="id"/>
+        <result column="doc_id"           property="docId"/>
+        <result column="kb_id"            property="kbId"/>
+        <result column="parent_id"        property="parentId"/>
+        <result column="chunk_type"       property="chunkType"/>
+        <result column="content"          property="content"/>
+        <result column="content_vector"   property="contentVector"/>
+        <result column="tsv"              property="tsv"/>
+        <result column="token_count"      property="tokenCount"/>
+        <result column="status"           property="status"/>
+        <result column="metadata"         property="metadata"/>
+        <result column="create_time"      property="createTime"/>
+        <result column="update_time"      property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, doc_id, kb_id, parent_id, chunk_type, content, content_vector, tsv,
+        token_count, status, metadata, create_time, update_time
+    </sql>
+
+    <insert id="insert" parameterType="cn.kong.zbrain.entity.Chunk" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_chunk
+            (doc_id, kb_id, parent_id, chunk_type, content, content_vector, token_count, status, metadata)
+        VALUES
+            (#{docId}, #{kbId}, #{parentId}, COALESCE(#{chunkType}, 'child'),
+             #{content},
+             <choose>
+                 <when test="contentVector != null">#{contentVector}::vector</when>
+                 <otherwise>NULL</otherwise>
+             </choose>,
+             COALESCE(#{tokenCount}, 0), COALESCE(#{status}, 'draft'),
+             <choose>
+                 <when test="metadata != null">#{metadata}::jsonb</when>
+                 <otherwise>NULL</otherwise>
+             </choose>)
+    </insert>
+
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO kb_chunk
+            (doc_id, kb_id, parent_id, chunk_type, content, content_vector, token_count, status, metadata)
+        VALUES
+        <foreach collection="list" item="c" separator=",">
+            (#{c.docId}, #{c.kbId}, #{c.parentId}, COALESCE(#{c.chunkType}, 'child'),
+             #{c.content},
+             <choose>
+                 <when test="c.contentVector != null">#{c.contentVector}::vector</when>
+                 <otherwise>NULL</otherwise>
+             </choose>,
+             COALESCE(#{c.tokenCount}, 0), COALESCE(#{c.status}, 'draft'),
+             <choose>
+                 <when test="c.metadata != null">#{c.metadata}::jsonb</when>
+                 <otherwise>NULL</otherwise>
+             </choose>)
+        </foreach>
+    </insert>
+
+    <update id="update" parameterType="cn.kong.zbrain.entity.Chunk">
+        UPDATE kb_chunk
+        <set>
+            <if test="parentId != null">parent_id = #{parentId},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="contentVector != null">content_vector = #{contentVector}::vector,</if>
+            <if test="tokenCount != null">token_count = #{tokenCount},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="metadata != null">metadata = #{metadata}::jsonb,</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateContent">
+        UPDATE kb_chunk
+        SET content = #{content}, token_count = #{tokenCount}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateVector">
+        UPDATE kb_chunk SET content_vector = #{vector}::vector WHERE id = #{id}
+    </update>
+
+    <update id="batchUpdateVector" parameterType="java.util.List">
+        <foreach collection="list" item="c" separator=";">
+            UPDATE kb_chunk SET content_vector = #{c.contentVector}::vector WHERE id = #{c.id}
+        </foreach>
+    </update>
+
+    <update id="updateStatus">
+        UPDATE kb_chunk SET status = #{status} WHERE id = #{id}
+    </update>
+
+    <update id="batchUpdateStatus">
+        UPDATE kb_chunk SET status = #{status}
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <update id="updateParentId">
+        UPDATE kb_chunk SET parent_id = #{parentId} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM kb_chunk WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteByDocId">
+        DELETE FROM kb_chunk WHERE doc_id = #{docId}
+    </delete>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chunk
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByDocId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chunk
+        WHERE doc_id = #{docId}
+        ORDER BY
+            CASE WHEN parent_id IS NULL THEN id ELSE parent_id END,
+            id
+    </select>
+
+    <select id="selectChildChunksByDocId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chunk
+        WHERE doc_id = #{docId}
+          AND chunk_type = 'child'
+          <if test="status != null and status != ''">
+              AND status = #{status}
+          </if>
+        ORDER BY id
+    </select>
+
+    <select id="selectChunksForEmbedding" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chunk
+        WHERE doc_id = #{docId}
+          AND chunk_type = 'child'
+          AND (status = 'draft' OR content_vector IS NULL)
+        ORDER BY id
+    </select>
+
+    <select id="selectParent" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chunk
+        WHERE id = #{parentId} AND chunk_type = 'parent'
+    </select>
+
+    <!-- ==================== 向量召回：基于 pgvector 余弦相似度 ==================== -->
+    <select id="vectorRetrieve" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chunk
+        WHERE kb_id = #{kbId}
+          AND chunk_type = 'child'
+          AND status = 'active'
+          AND content_vector IS NOT NULL
+        ORDER BY content_vector &lt;=&gt; #{vectorStr}::vector
+        LIMIT #{topK}
+    </select>
+
+    <!-- ==================== 全文召回：基于 zhparser 中文分词 ==================== -->
+    <select id="fulltextRetrieve" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>,
+               ts_rank(tsv, plainto_tsquery('zh_cn', #{query})) AS rank
+        FROM kb_chunk
+        WHERE kb_id = #{kbId}
+          AND chunk_type = 'child'
+          AND status = 'active'
+          AND tsv @@ plainto_tsquery('zh_cn', #{query})
+        ORDER BY rank DESC
+        LIMIT #{topK}
+    </select>
+
+    <!-- ==================== 模糊召回：基于 pg_trgm 相似度 ==================== -->
+    <select id="fuzzyRetrieve" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>,
+               similarity(content, #{query}) AS sim
+        FROM kb_chunk
+        WHERE kb_id = #{kbId}
+          AND chunk_type = 'child'
+          AND status = 'active'
+          AND similarity(content, #{query}) &gt; #{threshold}
+        ORDER BY sim DESC
+        LIMIT #{topK}
+    </select>
+
+    <select id="countByDocId" resultType="int">
+        SELECT COUNT(1) FROM kb_chunk WHERE doc_id = #{docId} AND chunk_type = 'child'
+    </select>
+
+</mapper>

@@ -1,0 +1,132 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+  tomcat:
+    max-threads: 200
+    accept-count: 100
+    max-connections: 8192
+    connection-timeout: 30000
+
+spring:
+  application:
+    name: z-brain
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 200MB
+      max-request-size: 500MB
+      file-size-threshold: 2MB
+  ai:
+    openai:
+      api-key: sk-27b4f5c3254a45e1a88911a90b517280
+      base-url: https://api.deepseek.com
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.2
+    vectorstore:
+      pgvector:
+        table-name: kb_chunks
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1024
+        initialize-schema: false
+        max-document-batch-size: 20
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+# ==================== MyBatis 配置 ====================
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.zbrain.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: true
+    lazy-loading-enabled: true
+    aggressive-lazy-loading: false
+    default-statement-timeout: 30
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# ==================== Z-Brain 业务配置 ====================
+zbrain:
+  # 文档处理相关
+  document:
+    upload-dir: ./data/uploads
+    parsed-dir: ./data/parsed
+    # 允许的文件类型
+    allowed-types: pdf,doc,docx,ppt,pptx,txt,md,html,xls,xlsx
+  # 分块策略
+  chunk:
+    parent-token-size: 1000
+    child-token-size: 200
+    token-overlap: 50
+  # 检索相关
+  retrieval:
+    vector-top-k: 20
+    fulltext-top-k: 20
+    fuzzy-top-k: 10
+    rrf-k: 60
+    rerank-top-n: 5
+    # 模糊匹配相似度阈值
+    fuzzy-threshold: 0.3
+  # LLM 上下文预算
+  llm:
+    context-token-budget: 8000
+    reserve-token: 2000
+    # 强制引用标记前缀
+    citation-prefix: "doc_"
+  # Redis Key 前缀与 TTL
+  cache:
+    prefix: "zbrain:"
+    doc-progress-ttl: 86400       # 1 天
+    chat-context-ttl: 7200        # 2 小时
+    embedding-ttl: 604800         # 7 天
+  # 百炼 SDK 配置
+  dashscope:
+    base-url: https://ws-guwaqc43qlwprv9e.ap-southeast-1.maas.aliyuncs.com/api/v1
+    api-key: sk-ws-H.LMPEPP.wLIJ.MEQCIAxwAqXqGXZKd9RWrggo7IW4XP2eplLZRNE8VQYQOs4DAiAJEPjSlZxfToSs0vQrWHW_uE0LuU2RnmnQ9FbNA_O3_w
+    embedding-model: text-embedding-v4
+    rerank-model: qwen3-rerank
+    # 批量向量化每批最大条数
+    embedding-batch-size: 25
+    # 超时（毫秒）
+    timeout: 60000
+    # 重试次数
+    retry: 3
+
+
+# ==================== 日志配置 ====================
+logging:
+  level:
+    root: INFO
+    com.zbrain: DEBUG
+    org.springframework.web: INFO
+    org.mybatis: DEBUG
+  file:
+    name: ./logs/z-brain.log
+    max-size: 100MB
+    max-history: 30
+
+# ==================== Actuator ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ==================== Knife4j ====================
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+    enable-version: true
+    enable-swagger-models: true

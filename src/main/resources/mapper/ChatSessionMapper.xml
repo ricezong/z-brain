@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.kong.zbrain.mapper.ChatSessionMapper">
+
+    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.ChatSession">
+        <id     column="id"              property="id"/>
+        <result column="kb_id"           property="kbId"/>
+        <result column="title"           property="title"/>
+        <result column="user_id"         property="userId"/>
+        <result column="message_count"   property="messageCount"/>
+        <result column="create_time"     property="createTime"/>
+        <result column="update_time"     property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, kb_id, title, user_id, message_count, create_time, update_time
+    </sql>
+
+    <insert id="insert" parameterType="cn.kong.zbrain.entity.ChatSession">
+        INSERT INTO kb_chat_session
+            (id, kb_id, title, user_id, message_count)
+        VALUES
+            (#{id}, #{kbId}, #{title}, COALESCE(#{userId}, 'anonymous'), COALESCE(#{messageCount}, 0))
+    </insert>
+
+    <update id="update" parameterType="cn.kong.zbrain.entity.ChatSession">
+        UPDATE kb_chat_session
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM kb_chat_session WHERE id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chat_session
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectByKbId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chat_session
+        WHERE kb_id = #{kbId}
+        ORDER BY update_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByKbId" resultType="long">
+        SELECT COUNT(1) FROM kb_chat_session WHERE kb_id = #{kbId}
+    </select>
+
+    <update id="incrementMessageCount">
+        UPDATE kb_chat_session SET message_count = message_count + 1 WHERE id = #{id}
+    </update>
+
+</mapper>

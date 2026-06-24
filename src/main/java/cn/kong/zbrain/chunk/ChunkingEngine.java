@@ -1,0 +1,60 @@
+package cn.kong.zbrain.chunk;
+
+import cn.kong.zbrain.entity.Chunk;
+
+import java.util.List;
+
+/**
+ * 分块引擎接口
+ *
+ * <p>支持父子分块（Parent-Child）策略：
+ * <ul>
+ *   <li>父块保留完整语义（1000 Token）</li>
+ *   <li>子块用于精确检索（200 Token）</li>
+ *   <li>子块记录父块 ID 及字符偏移量</li>
+ * </ul>
+ * </p>
+ *
+ * @author zbrain-team
+ */
+public interface ChunkingEngine {
+
+    /**
+     * 对文本进行父子分块
+     *
+     * @param text    清洗后的文本
+     * @param docId   文档 ID
+     * @param kbId    知识库 ID
+     * @return 分块列表（父块在前，子块在后）
+     */
+    List<Chunk> chunk(String text, Long docId, Long kbId);
+
+    /**
+     * 对单个文本进行子块切分
+     *
+     * @param parentContent 父块内容
+     * @param parentId      父块 ID
+     * @param docId         文档 ID
+     * @param kbId          知识库 ID
+     * @param startOffset   在原文中的起始偏移
+     * @return 子块列表
+     */
+    List<Chunk> splitToChildren(String parentContent, Long parentId, Long docId, Long kbId, int startOffset);
+
+    /**
+     * 合并多个分块内容
+     *
+     * @param chunks 待合并的分块列表
+     * @return 合并后的内容
+     */
+    String merge(List<Chunk> chunks);
+
+    /**
+     * 拆分单个分块
+     *
+     * @param chunk         原分块
+     * @param splitPosition 拆分位置（字符偏移）
+     * @return 拆分后的两个分块
+     */
+    List<Chunk> split(Chunk chunk, int splitPosition);
+}

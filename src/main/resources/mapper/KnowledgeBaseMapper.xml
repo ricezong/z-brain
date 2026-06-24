@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.kong.zbrain.mapper.KnowledgeBaseMapper">
+
+    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.KnowledgeBase">
+        <id     column="id"                  property="id"/>
+        <result column="name"                property="name"/>
+        <result column="description"         property="description"/>
+        <result column="category"            property="category"/>
+        <result column="prompt_template_id"  property="promptTemplateId"/>
+        <result column="status"              property="status"/>
+        <result column="doc_count"           property="docCount"/>
+        <result column="chunk_count"         property="chunkCount"/>
+        <result column="create_by"           property="createBy"/>
+        <result column="update_by"           property="updateBy"/>
+        <result column="create_time"         property="createTime"/>
+        <result column="update_time"         property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, description, category, prompt_template_id, status, doc_count, chunk_count,
+        create_by, update_by, create_time, update_time
+    </sql>
+
+    <insert id="insert" parameterType="cn.kong.zbrain.entity.KnowledgeBase" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_knowledge_base
+            (name, description, category, prompt_template_id, status, doc_count, chunk_count, create_by, update_by)
+        VALUES
+            (#{name}, #{description}, #{category}, #{promptTemplateId},
+             COALESCE(#{status}, 'active'), COALESCE(#{docCount}, 0), COALESCE(#{chunkCount}, 0),
+             COALESCE(#{createBy}, 'system'), COALESCE(#{updateBy}, 'system'))
+    </insert>
+
+    <update id="update" parameterType="cn.kong.zbrain.entity.KnowledgeBase">
+        UPDATE kb_knowledge_base
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="promptTemplateId != null">prompt_template_id = #{promptTemplateId},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        UPDATE kb_knowledge_base SET status = 'archived' WHERE id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_knowledge_base
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_knowledge_base
+        <where>
+            status != 'archived'
+            <if test="name != null and name != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="category != null and category != ''">
+                AND category = #{category}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+        ORDER BY create_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countList" resultType="long">
+        SELECT COUNT(1) FROM kb_knowledge_base
+        <where>
+            status != 'archived'
+            <if test="name != null and name != ''">
+                AND name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="category != null and category != ''">
+                AND category = #{category}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+        </where>
+    </select>
+
+    <update id="updateDocCount">
+        UPDATE kb_knowledge_base SET doc_count = doc_count + #{delta} WHERE id = #{id}
+    </update>
+
+    <update id="updateChunkCount">
+        UPDATE kb_knowledge_base SET chunk_count = chunk_count + #{delta} WHERE id = #{id}
+    </update>
+
+</mapper>
