@@ -26,12 +26,12 @@ spring:
       file-size-threshold: 2MB
   ai:
     openai:
-      api-key: sk-27b4f5c3254a45e1a88911a90b517280
+      api-key: sk-21c649228465f38320875d31
       base-url: https://api.deepseek.com
       chat:
         options:
-          model: deepseek-chat
-          temperature: 0.2
+          model: deepseek-v4-pro
+          temperature: 0.3
     vectorstore:
       pgvector:
         table-name: kb_chunks
@@ -95,7 +95,7 @@ zbrain:
   # 百炼 SDK 配置
   dashscope:
     base-url: https://llm-zpa4xzq09gstj9xb.cn-beijing.maas.aliyuncs.com/api/v1
-    api-key: sk-ws-H.RYHDILP.oVEN.MEUCIQDvqfKy2fuPqF0WNGLFJ34-Gf1NRBKQKkslPej-CvpLHQIgQo7tH-VvR9DdoC3zYA3XnXrG5tMHB9sUnjCloROo-UA
+    api-key: sk-ws-H.RYHDILP.oVEN.MCvpLHQIgQo7tH-VvR9DdoC3zYA3XnXrG5tMHB9sUnjCloROo-UA
     embedding-model: text-embedding-v4
     rerank-model: qwen3-rerank
     # 批量向量化每批最大条数（百炼 API 限制最多 10 条）

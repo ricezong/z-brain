@@ -3,9 +3,9 @@ spring:
   # PostgreSQL 数据源
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://124.223.110.114:15432/zbrain?stringtype=unspecified&reWriteBatchedInserts=true
+    url: jdbc:postgresql://localhost:15432/zbrain?stringtype=unspecified&reWriteBatchedInserts=true
     username: postgres
-    password: kong#dx@0926
+    password: postgres
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -17,7 +17,7 @@ spring:
   # Redis
   data:
     redis:
-      host: 124.223.110.114
+      host: localhost
       port: 16379
       database: 0
       timeout: 3000ms
