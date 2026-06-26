@@ -100,6 +100,7 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
                     .map(RetrievalResult::getContent)
                     .toList();
 
+            log.info("Rerank 开始: 候选数={}, topN={}", documents.size(), topN);
             List<RerankService.RerankResult> rerankResults =
                     rerankService.rerank(query, documents, topN);
 
@@ -111,6 +112,7 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
                 item.setScore(rr.relevanceScore());
                 result.add(item);
             }
+            log.info("Rerank 完成: 返回 {} 个结果", result.size());
             return result;
         } catch (Exception e) {
             // 降级策略：Rerank 失败则使用 RRF 融合后的排序结果

@@ -1,10 +1,15 @@
 import request from '@/utils/request'
-import type { Result, ChatRequest, ChatResponse } from '@/types'
+import type { Result, ChatRequest, ChatResponse, RewriteRequest, RewriteResponse } from '@/types'
 
 export const chatApi = {
   /** 同步问答 */
   chatSync(data: ChatRequest) {
     return request.post<Result<ChatResponse>, Result<ChatResponse>>('/chat/sync', { ...data, stream: false })
+  },
+
+  /** Query 改写（独立接口） */
+  queryRewrite(data: RewriteRequest) {
+    return request.post<Result<RewriteResponse>, Result<RewriteResponse>>('/chat/rewrite', data)
   },
 
   /** 流式问答（SSE）- 返回 EventSource */

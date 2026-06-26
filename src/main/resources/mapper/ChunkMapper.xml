@@ -84,7 +84,7 @@
 
     <update id="batchUpdateVector" parameterType="java.util.List">
         <foreach collection="list" item="c" separator=";">
-            UPDATE kb_chunk SET content_vector = #{c.contentVector}::vector WHERE id = #{c.id}
+            UPDATE kb_chunk SET content_vector = #{c.contentVector}::vector, status = #{c.status} WHERE id = #{c.id}
         </foreach>
     </update>
 

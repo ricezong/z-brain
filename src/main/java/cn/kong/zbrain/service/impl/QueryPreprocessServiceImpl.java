@@ -25,16 +25,16 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
     private final LLMService llmService;
     private final ChatContextCache chatContextCache;
 
-    /** 闲聊关键词模式 */
+    /** 闲聊关键词模式（必须完全匹配才判定为闲聊） */
     private static final Pattern CHITCHAT_PATTERN = Pattern.compile(
-            "^(你好|您好|hi|hello|hey|嗨|在吗|在不在|谢谢|感谢|再见|拜拜|bye|goodbye|" +
-                    "你是谁|你叫什么|你能做什么|帮我什么|介绍下你自己|今天天气|讲个笑话|" +
-                    "无聊|陪我聊天|聊聊天).*$",
+            "^(你好|您好|hi|hello|hey|嗨|在吗|在不在|谢谢|感谢|再见|拜拜|bye|goodbye|"
+                    + "你是谁|你叫什么|你能做什么|帮我什么|介绍下你自己|讲个笑话|"
+                    + "无聊|陪我聊天|聊聊天)$",
             Pattern.CASE_INSENSITIVE
     );
 
-    /** 闲聊最大长度阈值（短问题更可能是闲聊） */
-    private static final int CHITCHAT_MAX_LENGTH = 15;
+    /** 闲聊最大长度阈值 */
+    private static final int CHITCHAT_MAX_LENGTH = 6;
 
     /** 历史对话轮数 */
     private static final int HISTORY_ROUNDS = 3;
@@ -67,9 +67,10 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
     @Override
     public String rewriteQuery(String query, String sessionId) {
         List<ChatContextCache.ChatMessage> history = chatContextCache.getRecentMessages(sessionId, HISTORY_ROUNDS);
+
+        // 无历史对话：做关键词提取增强，不做 LLM 改写
         if (history.isEmpty()) {
-            // 无历史对话，无需改写
-            return query;
+            return extractKeywords(query);
         }
 
         try {
@@ -83,7 +84,8 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
                     要求：
                     1. 解决指代不清的问题（如"它"、"这个"、"那个"等代词替换为具体对象）
                     2. 保持原意，不要扩展或改变用户意图
-                    3. 直接输出改写后的查询，不要有任何解释或前缀
+                    3. 补充必要的上下文信息，使查询自包含
+                    4. 直接输出改写后的查询，不要有任何解释或前缀
 
                     对话历史：
                     %s
@@ -99,6 +101,38 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
             log.warn("Query 改写失败，使用原始查询: {}", e.getMessage());
             return query;
         }
+    }
+
+    /**
+     * 关键词提取增强（单轮对话时使用）
+     *
+     * <p>将查询扩展为更适合向量检索的形式：
+     * 去除停用词，保留核心关键词，并补充同义词。</p>
+     */
+    private String extractKeywords(String query) {
+        try {
+            String prompt = """
+                    请从以下查询中提取核心关键词，并扩展为更适合语义检索的形式。
+                    要求：
+                    1. 去除"的"、"了"、"是"等无意义停用词
+                    2. 补充相关同义词或上下位词
+                    3. 保持查询的核心语义不变
+                    4. 输出扩展后的查询文本，不超过 50 字，不要有任何解释或前缀
+
+                    原始查询：%s
+
+                    扩展后的查询：
+                    """.formatted(query);
+
+            String expanded = llmService.simpleChat(prompt);
+            if (expanded != null && !expanded.isBlank() && expanded.trim().length() > 3) {
+                log.debug("关键词扩展: {} -> {}", query, expanded.trim());
+                return expanded.trim();
+            }
+        } catch (Exception e) {
+            log.warn("关键词扩展失败，使用原始查询: {}", e.getMessage());
+        }
+        return query;
     }
 
     @Override
@@ -137,7 +171,13 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
         String vectorQuery = rewrittenQuery;
         if (enableHyde && !chitchat) {
             hydeAnswer = generateHyDE(rewrittenQuery);
-            vectorQuery = hydeAnswer;
+            // 确保 vectorQuery 不为 null
+            if (hydeAnswer != null && !hydeAnswer.isBlank()) {
+                vectorQuery = hydeAnswer;
+            } else {
+                log.warn("HyDE 生成为空，使用改写后的查询作为向量查询");
+                hydeAnswer = null;
+            }
         }
 
         return new PreprocessResult(

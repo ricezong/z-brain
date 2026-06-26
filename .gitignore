@@ -45,5 +45,16 @@ parsed/
 
 ### Application Properties ###
 application-local.yml
+application.yml
+application-dev.yml
+!application*.yml.example
 /testdata/面试记录.xlsx
 /testdata/面试资料-20-29.pdf
+
+# 项目知识库（本地维护，不提交远程）
+docs/
+
+# 环境变量（敏感信息）
+.env
+.env.*
+!.env.example

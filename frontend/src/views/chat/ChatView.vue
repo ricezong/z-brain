@@ -94,6 +94,42 @@
 
       <!-- 输入区域 -->
       <div class="chat-input-area">
+        <!-- 功能按钮行 -->
+        <div class="input-toolbar">
+          <div class="toolbar-left">
+            <el-tooltip content="Query 改写：将问题扩展为更适合检索的形式" placement="top">
+              <el-button
+                :type="enableQueryRewrite ? 'primary' : 'default'"
+                size="small"
+                :icon="MagicStick"
+                @click="handleRewriteQuery"
+                :loading="rewriting"
+                round
+                plain
+              >
+                改写
+              </el-button>
+            </el-tooltip>
+            <el-tooltip content="HyDE 增强：生成假设性答案用于向量检索" placement="top">
+              <el-button
+                :type="enableHyde ? 'primary' : 'default'"
+                size="small"
+                :icon="Cpu"
+                @click="enableHyde = !enableHyde"
+                round
+                plain
+              >
+                HyDE
+              </el-button>
+            </el-tooltip>
+          </div>
+          <div class="toolbar-right" v-if="rewrittenText">
+            <el-tag type="success" effect="plain" closable @close="rewrittenText = ''">
+              已改写：{{ rewrittenText.substring(0, 30) }}{{ rewrittenText.length > 30 ? '...' : '' }}
+            </el-tag>
+          </div>
+        </div>
+
         <div class="input-box">
           <el-input
             v-model="inputText"
@@ -122,7 +158,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
-import { ChatDotRound, Collection, Promotion } from '@element-plus/icons-vue'
+import { ChatDotRound, Collection, Promotion, MagicStick, Cpu } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { chatApi } from '@/api/chat'
 import { useAppStore } from '@/stores/app'
@@ -138,8 +174,10 @@ const { kbList, currentKb } = storeToRefs(appStore)
 const selectedKbId = ref<number | undefined>()
 const inputText = ref('')
 const sending = ref(false)
+const rewriting = ref(false)
 const enableHyde = ref(true)
 const enableQueryRewrite = ref(true)
+const rewrittenText = ref('')
 const messageListRef = ref<HTMLElement>()
 
 interface Message {
@@ -155,7 +193,7 @@ const messages = ref<Message[]>([])
 
 function renderMarkdown(content: string): string {
   if (!content) return ''
-  const html = marked(content)
+  const html = marked.parse(content) as string
   return DOMPurify.sanitize(html)
 }
 
@@ -169,6 +207,31 @@ function scrollToBottom() {
 
 function onKbChange() {
   messages.value = []
+  rewrittenText.value = ''
+}
+
+/** Query 改写 */
+async function handleRewriteQuery() {
+  const query = inputText.value.trim()
+  if (!query) {
+    ElMessage.warning('请先输入问题')
+    return
+  }
+
+  rewriting.value = true
+  try {
+    const res = await chatApi.queryRewrite({ query })
+    if (res.data) {
+      rewrittenText.value = res.data.rewrittenQuery
+      inputText.value = res.data.rewrittenQuery
+      enableQueryRewrite.value = true
+      ElMessage.success('Query 改写完成')
+    }
+  } catch (err: any) {
+    ElMessage.error('Query 改写失败：' + (err.message || '未知错误'))
+  } finally {
+    rewriting.value = false
+  }
 }
 
 async function handleSend() {
@@ -183,6 +246,7 @@ async function handleSend() {
   // 添加用户消息
   messages.value.push({ id: generateId(), role: 'user', content: query })
   inputText.value = ''
+  rewrittenText.value = ''
   scrollToBottom()
 
   // 添加 AI 占位消息
@@ -519,8 +583,37 @@ onMounted(() => {
 /* ==================== 输入区域 ==================== */
 .chat-input-area {
   border-top: 1px solid var(--border-light);
-  padding: 16px 32px;
+  padding: 12px 32px 16px;
   background: var(--surface);
+
+  .input-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 8px;
+
+    .toolbar-left {
+      display: flex;
+      gap: 8px;
+
+      .el-button {
+        height: 28px;
+        font-size: 12px;
+      }
+    }
+
+    .toolbar-right {
+      flex-shrink: 0;
+
+      .el-tag {
+        font-size: 12px;
+        max-width: 280px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
 
   .input-box {
     display: flex;

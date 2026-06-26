@@ -177,8 +177,14 @@ public class ChatServiceImpl implements ChatService {
             sendSseEvent(emitter, "rewritten_query", preprocess.rewrittenQuery());
             sendSseEvent(emitter, "hyde", preprocess.hydeAnswer());
             sendSseEvent(emitter, "retrieval", retrievalResults.stream()
-                    .map(r -> Map.of("chunkId", r.getChunkId(), "score", r.getScore(),
-                            "docId", r.getDocId(), "citationLabel", r.getCitationLabel()))
+                    .map(r -> {
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("chunkId", r.getChunkId());
+                        m.put("score", r.getScore());
+                        m.put("docId", r.getDocId());
+                        m.put("citationLabel", r.getCitationLabel());
+                        return m;
+                    })
                     .toList());
 
             if (retrievalResults.isEmpty()) {

@@ -2,8 +2,11 @@ package cn.kong.zbrain.controller;
 
 import cn.kong.zbrain.common.Result;
 import cn.kong.zbrain.dto.request.ChatRequest;
+import cn.kong.zbrain.dto.request.RewriteRequest;
 import cn.kong.zbrain.dto.response.ChatResponse;
+import cn.kong.zbrain.dto.response.RewriteResponse;
 import cn.kong.zbrain.service.ChatService;
+import cn.kong.zbrain.service.QueryPreprocessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -26,6 +29,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class ChatController {
 
     private final ChatService chatService;
+    private final QueryPreprocessService queryPreprocessService;
 
     private static final long SSE_TIMEOUT = 300_000L; // 5 分钟
 
@@ -51,5 +55,15 @@ public class ChatController {
 
         chatService.chatStream(request, emitter);
         return emitter;
+    }
+
+    @Operation(summary = "Query 改写（独立接口）")
+    @PostMapping("/rewrite")
+    public Result<RewriteResponse> rewriteQuery(@Valid @RequestBody RewriteRequest request) {
+        String rewritten = queryPreprocessService.rewriteQuery(
+                request.getQuery(),
+                request.getSessionId()
+        );
+        return Result.success(new RewriteResponse(request.getQuery(), rewritten));
     }
 }

@@ -71,7 +71,10 @@ public class RerankServiceImpl implements RerankService {
                 .apiKey(dashScopeConfig.getApiKey())
                 .build();
 
+        log.info("调用百炼 Rerank API: model={}, docCount={}, topN={}",
+                dashScopeConfig.getRerankModel(), documents.size(), topN);
         TextReRankResult result = rerank.call(param);
+        log.info("百炼 Rerank API 返回: resultCount={}", result.getOutput().getResults().size());
 
         List<RerankResult> results = new ArrayList<>();
         for (TextReRankOutput.Result item : result.getOutput().getResults()) {

@@ -147,6 +147,16 @@ export interface ChatResponse {
   costTimeMs: number
 }
 
+export interface RewriteRequest {
+  query: string
+  sessionId?: string
+}
+
+export interface RewriteResponse {
+  originalQuery: string
+  rewrittenQuery: string
+}
+
 export interface Citation {
   label: string
   chunkId: number
