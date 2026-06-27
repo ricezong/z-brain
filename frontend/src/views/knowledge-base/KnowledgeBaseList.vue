@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { knowledgeBaseApi } from '@/api/knowledge-base'
 import type { KnowledgeBase } from '@/types'
@@ -172,11 +172,15 @@ async function doDelete() {
 onMounted(() => {
   appStore.loadKbList()
 })
+
+onActivated(() => {
+  appStore.loadKbList()
+})
 </script>
 
 <style scoped>
 .kb-view {
-  flex: 1;
+  height: 100%;
   overflow-y: auto;
   padding: var(--s-6);
 }

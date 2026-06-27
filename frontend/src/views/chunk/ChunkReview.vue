@@ -165,11 +165,15 @@ async function handleSubmitReview() {
     const data: ReviewSubmitRequest = {}
     await documentApi.submitReview(docId, data)
     ElMessage.success('审核已提交，正在向量化')
-    router.push('/documents')
+    const kbId = document.value?.kbId
+    router.push(kbId ? `/knowledge-bases/${kbId}` : '/knowledge-bases')
   } catch (e) { if (e !== 'cancel') console.error(e) }
 }
 
-function goBack() { router.push('/documents') }
+function goBack() {
+  const kbId = document.value?.kbId
+  router.push(kbId ? `/knowledge-bases/${kbId}` : '/knowledge-bases')
+}
 
 function formatMetadata(metadata: string): string {
   try { return JSON.stringify(JSON.parse(metadata), null, 2) } catch { return metadata }

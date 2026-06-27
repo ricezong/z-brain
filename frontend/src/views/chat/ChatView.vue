@@ -382,6 +382,10 @@ onMounted(() => {
   gap: var(--s-3);
 }
 
+.msg.user {
+  flex-direction: row-reverse;
+}
+
 .msg-avatar {
   width: 32px;
   height: 32px;
@@ -399,6 +403,12 @@ onMounted(() => {
 
 .msg-body { flex: 1; min-width: 0; }
 
+.msg.user .msg-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
 .msg-meta {
   font-size: 12px;
   color: var(--text-muted);
@@ -409,10 +419,25 @@ onMounted(() => {
 }
 .msg-meta .name { color: var(--text); font-weight: 500; }
 
+.msg.user .msg-meta { justify-content: flex-end; }
+
 .msg-content {
   font-size: 14px;
   line-height: 1.7;
   color: var(--text);
+}
+
+.msg.user .msg-content {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 10px 14px;
+  border-radius: 12px 12px 2px 12px;
+  max-width: 80%;
+  word-break: break-word;
+}
+
+.msg.ai .msg-content {
+  max-width: 100%;
 }
 
 .citations {
@@ -481,6 +506,7 @@ onMounted(() => {
   transition: opacity 0.12s;
 }
 .msg:hover .msg-actions { opacity: 1; }
+.msg.user .msg-actions { justify-content: flex-end; }
 .msg-action {
   padding: 4px 8px;
   font-size: 11px;

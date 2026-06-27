@@ -98,16 +98,6 @@
               新建对话
             </button>
           </template>
-          <template v-if="currentView === 'kb-detail'">
-            <button class="btn btn-secondary btn-sm" @click="openUpload">
-              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
-              上传文档
-            </button>
-            <button class="btn btn-primary btn-sm" @click="startChatWithKb">
-              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              开始对话
-            </button>
-          </template>
         </div>
       </header>
 
@@ -199,20 +189,6 @@ function newChat() {
 function loadChat(chat: ChatSession) {
   currentChatId.value = chat.id
   router.push('/chat')
-}
-
-function startChatWithKb() {
-  const kbId = route.params.kbId
-  if (kbId) {
-    const kb = appStore.kbList.find(k => String(k.id) === kbId)
-    if (kb) appStore.setCurrentKb(kb)
-  }
-  newChat()
-}
-
-function openUpload() {
-  // Handled by the detail view
-  window.dispatchEvent(new CustomEvent('open-upload'))
 }
 
 onMounted(() => {
@@ -486,6 +462,7 @@ defineExpose({ showToast })
 
 .content {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   background: var(--bg);

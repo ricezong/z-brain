@@ -16,10 +16,6 @@
           </div>
         </div>
         <div class="kb-detail-actions">
-          <button class="btn btn-secondary" @click="showUploadModal = true">
-            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
-            上传文档
-          </button>
           <button class="btn btn-primary" @click="startChatWithKb">
             <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             开始对话
@@ -30,17 +26,6 @@
       <!-- Tabs -->
       <div class="tabs">
         <button class="tab active">文档<span class="count">{{ documents.length }}</span></button>
-      </div>
-
-      <!-- Upload zone -->
-      <div class="upload-zone" @click="showUploadModal = true" @dragover.prevent @drop.prevent="handleDrop">
-        <div class="upload-zone-icon">
-          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
-        </div>
-        <h4>拖拽文件到此处上传</h4>
-        <p>或点击选择文件</p>
-        <button class="btn btn-secondary btn-sm">选择文件</button>
-        <div class="formats">支持 PDF、Markdown、Word、TXT，单文件最大 200MB</div>
       </div>
 
       <!-- Document table -->
@@ -82,44 +67,7 @@
           </div>
         </div>
         <div v-if="filteredDocs.length === 0" style="padding:var(--s-7) var(--s-5);text-align:center;color:var(--text-muted);font-size:13px;">
-          {{ searchQuery ? '没有匹配的文档' : '此知识库还没有文档，点击上方上传' }}
-        </div>
-      </div>
-    </div>
-
-    <!-- Upload Modal -->
-    <div v-if="showUploadModal" class="modal-overlay" @click.self="showUploadModal = false">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 class="modal-title">上传文档到 {{ kb?.name }}</h2>
-          <button class="modal-close" @click="showUploadModal = false">
-            <svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="upload-zone" style="margin-bottom:0;" @click="triggerFileInput" @dragover.prevent @drop.prevent="handleDrop">
-            <div class="upload-zone-icon">
-              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
-            </div>
-            <h4>点击或拖拽文件上传</h4>
-            <p>支持 PDF、Markdown、Word、TXT</p>
-            <div class="formats">单文件最大 200MB</div>
-          </div>
-          <input ref="fileInputRef" type="file" multiple accept=".pdf,.doc,.docx,.txt,.md,.html,.ppt,.pptx,.xls,.xlsx" style="display:none;" @change="handleFileSelect" />
-          <div v-if="pendingFiles.length > 0" class="upload-file-list">
-            <div v-for="(f, i) in pendingFiles" :key="i" class="upload-file">
-              <div class="doc-icon" :class="getFileExt(f.name)">{{ getFileExt(f.name).toUpperCase() }}</div>
-              <span class="n">{{ f.name }}</span>
-              <span class="s">{{ formatSize(f.size) }}</span>
-              <button class="remove" @click="pendingFiles.splice(i, 1)">
-                <svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-ghost" @click="showUploadModal = false">取消</button>
-          <button class="btn btn-primary" @click="doUpload" :disabled="pendingFiles.length === 0">上传并解析</button>
+          {{ searchQuery ? '没有匹配的文档' : '此知识库还没有文档' }}
         </div>
       </div>
     </div>
@@ -146,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated } from 'vue'
+import { ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { knowledgeBaseApi } from '@/api/knowledge-base'
@@ -160,11 +108,8 @@ const appStore = useAppStore()
 const kb = ref<KnowledgeBase | null>(null)
 const documents = ref<Document[]>([])
 const searchQuery = ref('')
-const showUploadModal = ref(false)
 const showDeleteModal = ref(false)
 const deleteTarget = ref<Document | null>(null)
-const pendingFiles = ref<File[]>([])
-const fileInputRef = ref<HTMLInputElement>()
 
 const filteredDocs = computed(() => {
   if (!searchQuery.value) return documents.value
@@ -216,37 +161,6 @@ function openChunkReview(doc: Document) {
   router.push(`/documents/${doc.id}/chunks`)
 }
 
-function triggerFileInput() {
-  fileInputRef.value?.click()
-}
-
-function handleFileSelect(e: Event) {
-  const input = e.target as HTMLInputElement
-  if (input.files) {
-    pendingFiles.value.push(...Array.from(input.files))
-  }
-}
-
-function handleDrop(e: DragEvent) {
-  if (e.dataTransfer?.files) {
-    pendingFiles.value.push(...Array.from(e.dataTransfer.files))
-  }
-}
-
-async function doUpload() {
-  const kbId = Number(route.params.kbId)
-  for (const file of pendingFiles.value) {
-    try {
-      await documentApi.upload(kbId, file)
-    } catch (e) {
-      console.error('上传失败', e)
-    }
-  }
-  pendingFiles.value = []
-  showUploadModal.value = false
-  await loadKbDetail()
-}
-
 function confirmDeleteDoc(doc: Document) {
   deleteTarget.value = doc
   showDeleteModal.value = true
@@ -271,11 +185,18 @@ function startChatWithKb() {
 
 onMounted(loadKbDetail)
 onActivated(loadKbDetail)
+
+watch(() => route.params.kbId, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    searchQuery.value = ''
+    loadKbDetail()
+  }
+})
 </script>
 
 <style scoped>
 .kb-detail {
-  flex: 1;
+  height: 100%;
   overflow-y: auto;
   padding: var(--s-6);
 }
@@ -345,32 +266,6 @@ onActivated(loadKbDetail)
   margin-left: 6px; font-size: 11px; color: var(--text-muted);
   background: var(--bg-muted); padding: 1px 6px; border-radius: var(--r-sm);
 }
-
-/* Upload zone */
-.upload-zone {
-  border: 2px dashed var(--border-strong);
-  border-radius: var(--r-lg);
-  padding: var(--s-7) var(--s-6);
-  text-align: center;
-  background: var(--bg-subtle);
-  transition: border-color 0.12s, background 0.12s;
-  cursor: pointer;
-  margin-bottom: var(--s-5);
-}
-.upload-zone:hover { border-color: var(--primary); background: var(--bg-muted); }
-.upload-zone-icon {
-  width: 48px; height: 48px;
-  margin: 0 auto var(--s-4);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  color: var(--text-secondary);
-  display: flex; align-items: center; justify-content: center;
-}
-.upload-zone-icon svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.upload-zone h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
-.upload-zone p { font-size: 12px; color: var(--text-muted); margin-bottom: var(--s-4); }
-.upload-zone .formats { font-size: 11px; color: var(--text-muted); margin-top: var(--s-3); }
 
 /* Doc toolbar */
 .doc-toolbar {
@@ -454,23 +349,6 @@ onActivated(loadKbDetail)
 .status-badge.processing { background: var(--warning-soft); color: var(--warning); }
 .status-badge.empty { background: var(--bg-muted); color: var(--text-muted); }
 .status-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-
-/* Upload file list */
-.upload-file-list { margin-top: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); }
-.upload-file {
-  display: flex; align-items: center; gap: var(--s-3);
-  padding: var(--s-2) var(--s-3);
-  border: 1px solid var(--border); border-radius: var(--r-md); font-size: 12px;
-}
-.upload-file .doc-icon { width: 24px; height: 24px; font-size: 8px; }
-.upload-file .n { flex: 1; font-weight: 500; color: var(--text); }
-.upload-file .s { color: var(--text-muted); }
-.upload-file .remove {
-  width: 22px; height: 22px; border-radius: var(--r-sm);
-  display: flex; align-items: center; justify-content: center; color: var(--text-muted);
-}
-.upload-file .remove:hover { background: var(--bg-hover); color: var(--danger); }
-.upload-file .remove svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Modal */
 .modal-overlay {
