@@ -1,264 +1,388 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
-      <div>
-        <span class="page-title">知识库管理</span>
-        <p class="page-subtitle">创建和管理您的知识库空间</p>
+  <div class="kb-view">
+    <div class="kb-container">
+      <div class="kb-header">
+        <div>
+          <h2>知识库</h2>
+          <p>管理文档资料，让 AI 回答更有依据</p>
+        </div>
+        <button class="btn btn-primary" @click="showCreateModal = true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          新建知识库
+        </button>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreateDialog" round>创建知识库</el-button>
-    </div>
 
-    <div class="search-bar">
-      <el-input v-model="searchName" placeholder="搜索知识库名称..." clearable style="width: 260px" @keyup.enter="handleSearch">
-        <template #prefix><el-icon><Search /></el-icon></template>
-      </el-input>
-      <el-select v-model="searchCategory" placeholder="全部分类" clearable style="width: 160px">
-        <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
-      </el-select>
-      <el-button type="primary" :icon="Search" @click="handleSearch" round>查询</el-button>
-      <el-button :icon="Refresh" @click="handleReset" round plain>重置</el-button>
-    </div>
-
-    <div class="table-container">
-      <el-table v-loading="loading" :data="tableData" stripe>
-        <el-table-column prop="name" label="名称" min-width="180">
-          <template #default="{ row }">
-            <div class="kb-name-cell">
-              <div class="kb-icon"><el-icon><Collection /></el-icon></div>
-              <span class="kb-name-text">{{ row.name }}</span>
+      <!-- Grid -->
+      <div v-if="appStore.kbList.length > 0" class="kb-grid">
+        <div
+          v-for="kb in appStore.kbList"
+          :key="kb.id"
+          class="kb-card"
+          @click="$router.push(`/knowledge-bases/${kb.id}`)"
+        >
+          <div class="kb-card-head">
+            <div class="kb-card-icon">
+              <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
             </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="category" label="分类" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag effect="plain" round>{{ row.category }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="docCount" label="文档数" width="100" align="center">
-          <template #default="{ row }">
-            <span class="stat-num">{{ row.docCount }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="chunkCount" label="分块数" width="100" align="center">
-          <template #default="{ row }">
-            <span class="stat-num">{{ row.chunkCount }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="light" round>
-              {{ row.status === 'active' ? '活跃' : '已归档' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" width="180" align="center">
-          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-button link size="small" @click="openEditDialog(row)">编辑</el-button>
-            <el-divider direction="vertical" />
-            <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+            <button class="kb-card-menu" @click.stop="confirmDelete(kb)" aria-label="知识库操作">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+            </button>
+          </div>
+          <div>
+            <div class="kb-card-title">{{ kb.name }}</div>
+            <div class="kb-card-desc">{{ kb.description || '暂无描述' }}</div>
+          </div>
+          <div class="kb-card-stats">
+            <div class="kb-stat">
+              <span class="kb-stat-value">{{ kb.docCount ?? 0 }}</span>
+              <span class="kb-stat-label">文档</span>
+            </div>
+            <div class="kb-stat">
+              <span class="kb-stat-value">{{ kb.chunkCount ?? 0 }}</span>
+              <span class="kb-stat-label">分块</span>
+            </div>
+          </div>
+          <div class="kb-card-footer">
+            <span class="status-badge" :class="kb.status === 'active' ? 'ready' : 'empty'">
+              <span class="dot"></span>
+              {{ kb.status === 'active' ? '可用' : '空' }}
+            </span>
+            <span>{{ formatTime(kb.updateTime) }}</span>
+          </div>
+        </div>
+      </div>
 
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pageNum"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next"
-          background
-          @size-change="loadData"
-          @current-change="loadData"
-        />
+      <!-- Empty state -->
+      <div v-else class="kb-empty">
+        <div class="kb-empty-icon">
+          <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        </div>
+        <h3>还没有任何知识库</h3>
+        <p>创建一个知识库，上传文档后即可在对话中引用。智识会自动解析、分块、向量化。</p>
+        <button class="btn btn-primary" @click="showCreateModal = true">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          新建知识库
+        </button>
       </div>
     </div>
 
-    <!-- 创建/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑知识库' : '创建知识库'" width="520px" class="kb-dialog">
-      <el-form ref="formRef" :model="formData" :rules="formRules" label-width="80px" label-position="left">
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="formData.name" placeholder="请输入知识库名称" />
-        </el-form-item>
-        <el-form-item label="描述" prop="description">
-          <el-input v-model="formData.description" type="textarea" :rows="3" placeholder="请输入知识库描述" />
-        </el-form-item>
-        <el-form-item label="分类" prop="category">
-          <el-select v-model="formData.category" placeholder="请选择分类" style="width: 100%">
-            <el-option v-for="cat in categories" :key="cat" :label="cat" :value="cat" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false" round>取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit" round>确定</el-button>
-      </template>
-    </el-dialog>
+    <!-- Create KB Modal -->
+    <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">新建知识库</h2>
+          <button class="modal-close" @click="showCreateModal = false">
+            <svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label class="modal-label">名称<span class="required">*</span></label>
+            <input class="modal-input" v-model="newKbName" placeholder="例如：产品文档库" />
+            <div v-if="nameError" class="modal-error show">请输入知识库名称</div>
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">描述</label>
+            <textarea class="modal-textarea" v-model="newKbDesc" placeholder="简述这个知识库的用途"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" @click="showCreateModal = false">取消</button>
+          <button class="btn btn-primary" @click="createKb">创建知识库</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click.self="showDeleteModal = false">
+      <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+          <h2 class="modal-title">确认删除</h2>
+          <button class="modal-close" @click="showDeleteModal = false">
+            <svg viewBox="0 0 24 24"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:13px;line-height:1.6;">
+            删除知识库「{{ deleteTarget?.name }}」会同时删除所有文档与分块，且无法恢复。确定继续吗？
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" @click="showDeleteModal = false">取消</button>
+          <button class="btn btn-danger" @click="doDelete">删除</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { Plus, Search, Refresh, Collection } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { knowledgeBaseApi } from '@/api/knowledge-base'
+import { ref, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { formatDateTime } from '@/utils/format'
-import type { KnowledgeBase, KnowledgeBaseCreateRequest, KnowledgeBaseUpdateRequest } from '@/types'
+import { knowledgeBaseApi } from '@/api/knowledge-base'
+import type { KnowledgeBase } from '@/types'
 
 const appStore = useAppStore()
+const showCreateModal = ref(false)
+const showDeleteModal = ref(false)
+const deleteTarget = ref<KnowledgeBase | null>(null)
+const newKbName = ref('')
+const newKbDesc = ref('')
+const nameError = ref(false)
 
-const loading = ref(false)
-const tableData = ref<KnowledgeBase[]>([])
-const total = ref(0)
-const pageNum = ref(1)
-const pageSize = ref(10)
-const searchName = ref('')
-const searchCategory = ref('')
-const categories = ref<string[]>([])
-
-const dialogVisible = ref(false)
-const isEdit = ref(false)
-const editId = ref(0)
-const submitting = ref(false)
-const formRef = ref<FormInstance>()
-
-const formData = reactive<KnowledgeBaseCreateRequest>({
-  name: '',
-  description: '',
-  category: 'general',
-})
-
-const formRules = {
-  name: [{ required: true, message: '请输入知识库名称', trigger: 'blur' }],
+function formatTime(t: string) {
+  if (!t) return ''
+  return t.slice(0, 10)
 }
 
-async function loadCategories() {
+async function createKb() {
+  nameError.value = !newKbName.value.trim()
+  if (nameError.value) return
   try {
-    const res = await knowledgeBaseApi.categories()
-    categories.value = res.data
-  } catch (e) { console.error(e) }
-}
-
-async function loadData() {
-  loading.value = true
-  try {
-    const res = await knowledgeBaseApi.list({
-      name: searchName.value || undefined,
-      category: searchCategory.value || undefined,
-      pageNum: pageNum.value,
-      pageSize: pageSize.value,
+    await knowledgeBaseApi.create({
+      name: newKbName.value.trim(),
+      description: newKbDesc.value.trim(),
     })
-    tableData.value = res.data.list
-    total.value = res.data.total
-  } catch (e) { console.error(e) } finally { loading.value = false }
+    showCreateModal.value = false
+    newKbName.value = ''
+    newKbDesc.value = ''
+    await appStore.loadKbList()
+  } catch (e) {
+    console.error(e)
+  }
 }
 
-function handleSearch() { pageNum.value = 1; loadData() }
-function handleReset() { searchName.value = ''; searchCategory.value = ''; pageNum.value = 1; loadData() }
-
-function openCreateDialog() {
-  isEdit.value = false
-  formData.name = ''
-  formData.description = ''
-  formData.category = 'general'
-  dialogVisible.value = true
+function confirmDelete(kb: KnowledgeBase) {
+  deleteTarget.value = kb
+  showDeleteModal.value = true
 }
 
-function openEditDialog(row: KnowledgeBase) {
-  isEdit.value = true
-  editId.value = row.id
-  formData.name = row.name
-  formData.description = row.description
-  formData.category = row.category
-  dialogVisible.value = true
-}
-
-async function handleSubmit() {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    submitting.value = true
-    try {
-      if (isEdit.value) {
-        const updateData: KnowledgeBaseUpdateRequest = { name: formData.name, description: formData.description, category: formData.category }
-        await knowledgeBaseApi.update(editId.value, updateData)
-        ElMessage.success('编辑成功')
-      } else {
-        await knowledgeBaseApi.create(formData)
-        ElMessage.success('创建成功')
-      }
-      dialogVisible.value = false
-      loadData()
-      appStore.loadKbList()
-    } catch (e) { console.error(e) } finally { submitting.value = false }
-  })
-}
-
-async function handleDelete(row: KnowledgeBase) {
+async function doDelete() {
+  if (!deleteTarget.value) return
   try {
-    await ElMessageBox.confirm(`确定要删除知识库「${row.name}」吗？`, '提示', { type: 'warning' })
-    await knowledgeBaseApi.delete(row.id)
-    ElMessage.success('删除成功')
-    loadData()
-    appStore.loadKbList()
-  } catch (e) { if (e !== 'cancel') console.error(e) }
+    await knowledgeBaseApi.delete(deleteTarget.value.id)
+    showDeleteModal.value = false
+    deleteTarget.value = null
+    await appStore.loadKbList()
+  } catch (e) {
+    console.error(e)
+  }
 }
 
-onMounted(() => { loadCategories(); loadData() })
+onMounted(() => {
+  appStore.loadKbList()
+})
 </script>
 
-<style scoped lang="scss">
-.page-subtitle {
-  font-size: 14px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-  font-weight: 400;
+<style scoped>
+.kb-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-6);
 }
 
-.table-container {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  box-shadow: var(--shadow-sm);
+.kb-container {
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
-.kb-name-cell {
+.kb-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: var(--s-6);
+}
+.kb-header h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+.kb-header p { font-size: 13px; color: var(--text-secondary); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  border: 1px solid transparent;
+}
+.btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: #B91C1C; }
+
+/* KB Grid */
+.kb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--s-4);
+}
+
+.kb-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  padding: var(--s-4);
+  transition: border-color 0.12s, box-shadow 0.12s;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.kb-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+
+.kb-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-2); }
+
+.kb-card-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: var(--r-md);
   display: flex;
   align-items: center;
-  gap: 10px;
-
-  .kb-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-sm);
-    background: var(--primary-bg);
-    color: var(--primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .kb-name-text {
-    font-weight: 600;
-    color: var(--text-primary);
-  }
+  justify-content: center;
 }
+.kb-card-icon svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
-.stat-num {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--text-primary);
-}
-
-.pagination-container {
+.kb-card-menu {
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
   display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
+  align-items: center;
+  justify-content: center;
 }
+.kb-card-menu:hover { background: var(--bg-hover); color: var(--text); }
+.kb-card-menu svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.kb-card-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 2px; }
+.kb-card-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kb-card-stats {
+  display: flex;
+  gap: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+.kb-stat { display: flex; flex-direction: column; gap: 2px; }
+.kb-stat-value { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.kb-stat-label { font-size: 11px; color: var(--text-muted); }
+
+.kb-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+.status-badge.ready { background: var(--success-soft); color: var(--success); }
+.status-badge.empty { background: var(--bg-muted); color: var(--text-muted); }
+.status-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+/* Empty state */
+.kb-empty {
+  text-align: center;
+  padding: var(--s-7) var(--s-6);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-subtle);
+}
+.kb-empty-icon {
+  width: 48px; height: 48px;
+  margin: 0 auto var(--s-4);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kb-empty-icon svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.kb-empty h3 { font-size: 16px; font-weight: 600; margin-bottom: var(--s-2); }
+.kb-empty p { font-size: 13px; color: var(--text-secondary); margin-bottom: var(--s-5); max-width: 360px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(9, 9, 11, 0.4);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--s-6);
+}
+.modal {
+  background: var(--bg);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-pop);
+  max-width: 480px; width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.modal-header {
+  padding: var(--s-5) var(--s-5) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 16px; font-weight: 600; }
+.modal-close {
+  width: 28px; height: 28px;
+  border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+}
+.modal-close:hover { background: var(--bg-hover); color: var(--text); }
+.modal-close svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.modal-body { padding: var(--s-5); overflow-y: auto; flex: 1; }
+.modal-footer {
+  padding: var(--s-4) var(--s-5);
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: var(--s-2);
+  background: var(--bg-subtle);
+}
+.modal-field { margin-bottom: var(--s-4); }
+.modal-field:last-child { margin-bottom: 0; }
+.modal-label { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 6px; display: block; }
+.modal-label .required { color: var(--danger); margin-left: 2px; }
+.modal-input, .modal-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  background: var(--bg);
+  transition: border-color 0.12s, box-shadow 0.12s;
+  font-family: inherit;
+}
+.modal-input:focus, .modal-textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(24,24,27,0.06);
+  outline: none;
+}
+.modal-textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
+.modal-error { font-size: 11px; color: var(--danger); margin-top: 4px; display: none; }
+.modal-error.show { display: block; }
 </style>

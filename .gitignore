@@ -34,6 +34,12 @@ build/
 logs/
 *.log
 
+### Node ###
+node_modules/
+frontend/dist/
+frontend/auto-imports.d.ts
+frontend/components.d.ts
+
 ### OS ###
 .DS_Store
 Thumbs.db

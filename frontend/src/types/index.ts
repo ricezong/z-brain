@@ -125,6 +125,15 @@ export interface ChunkSplitRequest {
 }
 
 // ==================== 对话 ====================
+export interface ChatSession {
+  id: string
+  title: string
+  kbId: number | null
+  kbName: string
+  updated: string
+  preview: string
+}
+
 export interface ChatRequest {
   sessionId?: string
   kbId: number

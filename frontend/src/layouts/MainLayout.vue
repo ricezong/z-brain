@@ -1,350 +1,547 @@
 <template>
-  <el-container class="main-layout">
-    <!-- 侧边栏 -->
-    <el-aside :width="sidebarCollapsed ? '72px' : '240px'" class="sidebar">
-      <div class="logo-area">
-        <div class="logo-icon">
-          <svg viewBox="0 0 32 32" width="28" height="28">
-            <defs>
-              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
-              </linearGradient>
-            </defs>
-            <rect width="32" height="32" rx="8" fill="url(#logoGrad)"/>
-            <text x="16" y="22" font-size="16" font-weight="bold" fill="white" text-anchor="middle" font-family="Inter,sans-serif">Z</text>
-          </svg>
-        </div>
-        <transition name="fade">
-          <span v-show="!sidebarCollapsed" class="logo-text">智多星</span>
-        </transition>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">智</div>
+        <span class="brand-name">智识</span>
+        <span class="brand-version">v1.0</span>
       </div>
 
-      <el-menu
-        :default-active="activeMenu"
-        :collapse="sidebarCollapsed"
-        :collapse-transition="false"
-        background-color="transparent"
-        text-color="rgba(255,255,255,0.55)"
-        active-text-color="#ffffff"
-        router
-        class="sidebar-menu"
-      >
-        <el-menu-item
-          v-for="item in menuItems"
-          :key="item.path"
-          :index="item.path"
-          class="sidebar-item"
+      <nav class="sidebar-nav">
+        <button
+          v-for="item in navItems"
+          :key="item.view"
+          class="nav-item"
+          :class="{ active: isActiveNav(item.view) }"
+          @click="item.action"
         >
-          <el-icon size="18"><component :is="item.icon" /></el-icon>
-          <template #title>{{ item.title }}</template>
-        </el-menu-item>
-      </el-menu>
+          <svg viewBox="0 0 24 24" v-html="item.icon"></svg>
+          {{ item.label }}
+          <span v-if="item.count !== undefined" class="count">{{ item.count }}</span>
+        </button>
+      </nav>
 
-      <!-- 底部折叠按钮 -->
-      <div class="sidebar-footer" @click="toggleSidebar">
-        <el-icon size="18" color="rgba(255,255,255,0.4)">
-          <Fold v-if="!sidebarCollapsed" />
-          <Expand v-else />
-        </el-icon>
-        <transition name="fade">
-          <span v-show="!sidebarCollapsed" class="collapse-text">收起菜单</span>
-        </transition>
-      </div>
-    </el-aside>
-
-    <el-container>
-      <!-- 顶部导航 -->
-      <el-header class="header">
-        <div class="header-left">
-          <el-breadcrumb separator="/" class="breadcrumb">
-            <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
-            <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
-        <div class="header-right">
-          <el-select
-            v-model="selectedKbId"
-            placeholder="选择知识库"
-            class="kb-selector"
-            @change="onKbChange"
+      <!-- Sidebar list area -->
+      <div class="sidebar-list" id="sidebarList">
+        <template v-if="currentView === 'chat' || currentView === 'settings'">
+          <div class="sidebar-section-label">
+            <span>历史对话</span>
+            <button class="add-btn" @click="newChat" aria-label="新建对话">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
+          </div>
+          <button
+            v-for="chat in chatHistory"
+            :key="chat.id"
+            class="list-item"
+            :class="{ active: chat.id === currentChatId }"
+            @click="loadChat(chat)"
           >
-            <template #prefix>
-              <el-icon><Collection /></el-icon>
-            </template>
-            <el-option v-for="kb in kbList" :key="kb.id" :label="kb.name" :value="kb.id" />
-          </el-select>
-          <el-avatar :size="36" class="user-avatar">
-            <el-icon><User /></el-icon>
-          </el-avatar>
-        </div>
-      </el-header>
+            <span class="list-item-title">{{ chat.title }}</span>
+            <span class="list-item-meta">
+              <span v-if="chat.kbName" class="badge">{{ chat.kbName.slice(0, 4) }}</span>
+              <span>{{ chat.updated }}</span>
+            </span>
+          </button>
+        </template>
+        <template v-else>
+          <div class="sidebar-section-label">
+            <span>知识库</span>
+            <button class="add-btn" @click="$router.push('/knowledge-bases')" aria-label="新建知识库">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </button>
+          </div>
+          <button
+            v-for="kb in appStore.kbList"
+            :key="kb.id"
+            class="list-item"
+            :class="{ active: String(kb.id) === route.params.kbId }"
+            @click="$router.push(`/knowledge-bases/${kb.id}`)"
+          >
+            <span class="list-item-title">{{ kb.name }}</span>
+            <span class="list-item-meta">
+              <span>{{ kb.docCount ?? 0 }} 文档</span>
+              <span class="dot"></span>
+              <span>{{ kb.chunkCount ?? 0 }} 分块</span>
+            </span>
+          </button>
+        </template>
+      </div>
 
-      <!-- 主内容区 -->
-      <el-main class="main-content">
+      <div class="sidebar-footer">
+        <div class="user-avatar">李</div>
+        <div class="user-info">
+          <div class="user-name">用户</div>
+          <div class="user-email">z-brain@local</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="app-main">
+      <header class="topbar">
+        <div class="topbar-breadcrumb">
+          <template v-if="currentView === 'kb-detail'">
+            <span class="crumb-link" @click="$router.push('/knowledge-bases')">知识库</span>
+            <span class="sep">/</span>
+            <span class="current">{{ currentKbName }}</span>
+          </template>
+          <template v-else>
+            <span class="current">{{ viewTitle }}</span>
+          </template>
+        </div>
+        <div class="topbar-actions">
+          <template v-if="currentView === 'chat'">
+            <button class="btn btn-secondary btn-sm" @click="newChat">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              新建对话
+            </button>
+          </template>
+          <template v-if="currentView === 'kb-detail'">
+            <button class="btn btn-secondary btn-sm" @click="openUpload">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+              上传文档
+            </button>
+            <button class="btn btn-primary btn-sm" @click="startChatWithKb">
+              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              开始对话
+            </button>
+          </template>
+        </div>
+      </header>
+
+      <div class="content">
         <router-view v-slot="{ Component }">
-          <transition name="page" mode="out-in">
+          <keep-alive>
             <component :is="Component" />
-          </transition>
+          </keep-alive>
         </router-view>
-      </el-main>
-    </el-container>
-  </el-container>
+      </div>
+    </main>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { storeToRefs } from 'pinia'
+import type { ChatSession } from '@/types'
 
 const route = useRoute()
+const router = useRouter()
 const appStore = useAppStore()
-const { currentKb, kbList, sidebarCollapsed } = storeToRefs(appStore)
 
-const selectedKbId = ref<number | undefined>()
+const currentChatId = ref('default')
+const chatHistory = ref<ChatSession[]>([
+  { id: 'c1', title: '新对话', kbId: null, kbName: '', updated: '刚刚', preview: '' },
+])
 
-const menuItems = [
-  { path: '/knowledge-bases', title: '知识库管理', icon: 'Collection' },
-  { path: '/documents', title: '文档管理', icon: 'Document' },
-  { path: '/chat', title: '智能问答', icon: 'ChatDotRound' },
-  { path: '/prompt-templates', title: '提示词模板', icon: 'EditPen' },
-]
-
-const activeMenu = computed(() => {
-  const path = route.path
-  if (path.startsWith('/documents')) return '/documents'
-  return path
+const currentView = computed(() => {
+  if (route.name === 'KnowledgeBaseDetail') return 'kb-detail'
+  if (route.name === 'KnowledgeBases') return 'kb-list'
+  if (route.name === 'Settings') return 'settings'
+  return 'chat'
 })
 
-const currentTitle = computed(() => {
-  return (route.meta.title as string) || '智多星知识库'
-})
-
-function toggleSidebar() {
-  appStore.toggleSidebar()
-}
-
-function onKbChange(kbId: number) {
-  const kb = kbList.value.find((k) => k.id === kbId)
-  if (kb) {
-    appStore.setCurrentKb(kb)
+const viewTitle = computed(() => {
+  const map: Record<string, string> = {
+    chat: '对话',
+    'kb-list': '知识库',
+    'kb-detail': '知识库',
+    settings: '设置',
   }
+  return map[currentView.value] || '对话'
+})
+
+const currentKbName = computed(() => {
+  const kbId = route.params.kbId
+  const kb = appStore.kbList.find(k => String(k.id) === kbId)
+  return kb?.name || ''
+})
+
+const navItems = computed(() => [
+  {
+    view: 'chat',
+    label: '对话',
+    icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    count: chatHistory.value.length,
+    action: () => router.push('/chat'),
+  },
+  {
+    view: 'kb-list',
+    label: '知识库',
+    icon: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+    count: appStore.kbList.length,
+    action: () => router.push('/knowledge-bases'),
+  },
+  {
+    view: 'settings',
+    label: '设置',
+    icon: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    action: () => router.push('/settings'),
+  },
+])
+
+function isActiveNav(view: string) {
+  if (view === 'kb-list') return currentView.value === 'kb-list' || currentView.value === 'kb-detail'
+  return currentView.value === view
 }
 
-watch(currentKb, (val) => {
-  selectedKbId.value = val?.id
-}, { immediate: true })
+function newChat() {
+  currentChatId.value = 'new-' + Date.now()
+  router.push('/chat')
+}
+
+function loadChat(chat: ChatSession) {
+  currentChatId.value = chat.id
+  router.push('/chat')
+}
+
+function startChatWithKb() {
+  const kbId = route.params.kbId
+  if (kbId) {
+    const kb = appStore.kbList.find(k => String(k.id) === kbId)
+    if (kb) appStore.setCurrentKb(kb)
+  }
+  newChat()
+}
+
+function openUpload() {
+  // Handled by the detail view
+  window.dispatchEvent(new CustomEvent('open-upload'))
+}
 
 onMounted(() => {
   appStore.loadKbList()
 })
+
+// Toast utility
+function showToast(message: string, type: string = 'default') {
+  const container = document.getElementById('toastContainer')
+  if (!container) return
+  const toast = document.createElement('div')
+  toast.className = 'toast ' + type
+  toast.textContent = message
+  container.appendChild(toast)
+  setTimeout(() => {
+    toast.style.opacity = '0'
+    toast.style.transform = 'translateY(8px)'
+    toast.style.transition = 'opacity 0.2s, transform 0.2s'
+    setTimeout(() => toast.remove(), 220)
+  }, 2400)
+}
+
+defineExpose({ showToast })
 </script>
 
-<style scoped lang="scss">
-.main-layout {
+<style scoped>
+.app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ==================== Sidebar ==================== */
+.app-sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--bg-subtle);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
   height: 100vh;
 }
 
-/* ==================== 侧边栏 ==================== */
-.sidebar {
-  background: var(--sidebar-bg);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
+.sidebar-brand {
+  height: var(--topbar-h);
+  padding: 0 var(--s-5);
   display: flex;
-  flex-direction: column;
-  position: relative;
-  z-index: 10;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%);
-    pointer-events: none;
-  }
-
-  .logo-area {
-    height: var(--header-height);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    position: relative;
-    z-index: 1;
-
-    .logo-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .logo-text {
-      color: #fff;
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      white-space: nowrap;
-    }
-  }
-
-  .sidebar-menu {
-    flex: 1;
-    border-right: none !important;
-    padding: 16px 12px;
-    position: relative;
-    z-index: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-
-    &::-webkit-scrollbar {
-      width: 0;
-    }
-  }
-
-  :deep(.sidebar-item) {
-    height: 44px;
-    line-height: 44px;
-    margin-bottom: 4px;
-    border-radius: var(--radius-sm) !important;
-    padding-left: 16px !important;
-    transition: all 0.2s ease;
-    position: relative;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.08) !important;
-      color: #fff !important;
-    }
-
-    &.is-active {
-      background: linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(129, 140, 248, 0.2) 100%) !important;
-      color: #fff !important;
-
-      &::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 3px;
-        height: 20px;
-        background: var(--primary-light);
-        border-radius: 0 3px 3px 0;
-      }
-    }
-  }
-
-  .sidebar-footer {
-    height: 48px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 20px;
-    cursor: pointer;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    transition: background 0.2s;
-    position: relative;
-    z-index: 1;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .collapse-text {
-      color: rgba(255, 255, 255, 0.4);
-      font-size: 13px;
-      white-space: nowrap;
-    }
-  }
+  align-items: center;
+  gap: var(--s-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
-/* ==================== 顶部导航 ==================== */
-.header {
-  height: var(--header-height);
-  background: var(--surface);
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brand-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  background: var(--bg-muted);
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  margin-left: auto;
+}
+
+.sidebar-nav {
+  padding: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.nav-item:hover { background: var(--bg-hover); color: var(--text); }
+.nav-item.active { background: var(--bg-active); color: var(--text); }
+
+.nav-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.nav-item .count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-section-label {
+  padding: var(--s-4) var(--s-5) var(--s-2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
-  box-shadow: var(--shadow-xs);
-  z-index: 9;
-
-  .header-left {
-    .breadcrumb {
-      :deep(.el-breadcrumb__item) {
-        .el-breadcrumb__inner {
-          color: var(--text-tertiary);
-          font-weight: 400;
-        }
-        &:last-child .el-breadcrumb__inner {
-          color: var(--text-primary);
-          font-weight: 600;
-        }
-      }
-    }
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-
-    .kb-selector {
-      width: 200px;
-
-      :deep(.el-select__wrapper) {
-        background: var(--bg);
-        box-shadow: none !important;
-        border: 1px solid var(--border) !important;
-      }
-    }
-
-    .user-avatar {
-      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-      color: #fff;
-      cursor: pointer;
-      transition: var(--transition);
-
-      &:hover {
-        transform: scale(1.05);
-        box-shadow: var(--shadow-primary);
-      }
-    }
-  }
 }
 
-/* ==================== 主内容区 ==================== */
-.main-content {
-  background: var(--bg);
-  padding: 0;
+.sidebar-section-label .add-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.sidebar-section-label .add-btn:hover { background: var(--bg-hover); color: var(--text); }
+.sidebar-section-label .add-btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--s-3) var(--s-3);
+}
+
+.list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  margin-bottom: 1px;
+  transition: background 0.12s, color 0.12s;
+}
+
+.list-item:hover { background: var(--bg-hover); color: var(--text); }
+.list-item.active { background: var(--bg-active); color: var(--text); }
+
+.list-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
-/* ==================== 过渡动画 ==================== */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
+.list-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
 }
 
-.page-enter-active {
-  transition: all 0.3s ease;
+.list-item-meta .dot {
+  width: 4px;
+  height: 4px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  display: inline-block;
 }
-.page-leave-active {
-  transition: all 0.2s ease;
+
+.list-item-meta .badge {
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  font-size: 10px;
+  font-weight: 500;
 }
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(12px);
+
+.sidebar-footer {
+  padding: var(--s-3);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
 }
-.page-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
+
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 13px; font-weight: 500; }
+.user-email { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ==================== Main ==================== */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+}
+
+.topbar {
+  height: var(--topbar-h);
+  border-bottom: 1px solid var(--border);
+  padding: 0 var(--s-5);
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex-shrink: 0;
+  background: var(--bg);
+}
+
+.topbar-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.topbar-breadcrumb .sep { color: var(--text-muted); }
+.topbar-breadcrumb .current { color: var(--text); font-weight: 500; font-size: 15px; }
+.topbar-breadcrumb .crumb-link { cursor: pointer; }
+.topbar-breadcrumb .crumb-link:hover { color: var(--text); }
+
+.topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
+}
+
+/* ==================== Buttons ==================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  border: 1px solid transparent;
+}
+.btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.75; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.btn-primary { background: var(--primary); color: var(--primary-foreground); }
+.btn-primary:hover { background: var(--primary-hover); }
+
+.btn-secondary { background: var(--bg); color: var(--text); border-color: var(--border); }
+.btn-secondary:hover { background: var(--bg-hover); }
+
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ==================== Toast ==================== */
+.toast-container {
+  position: fixed;
+  bottom: var(--s-5);
+  right: var(--s-5);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--text);
+  color: var(--text-inverse);
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+  min-width: 240px;
+  max-width: 360px;
+  animation: toast-in 0.2s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+.toast.warning { background: var(--warning); }
 </style>
