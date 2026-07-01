@@ -41,6 +41,11 @@ public class ZBrainProperties {
      */
     private Cache cache = new Cache();
 
+    /**
+     * LlamaIndex Cloud 文档解析配置（PDF 专用）
+     */
+    private LlamaIndex llamaIndex = new LlamaIndex();
+
     @Data
     public static class Document {
         private String uploadDir = "./data/uploads";
@@ -93,5 +98,21 @@ public class ZBrainProperties {
         private long chatContextTtl = 7200L;
         /** Embedding 缓存 TTL（秒）- 7 天 */
         private long embeddingTtl = 604800L;
+    }
+
+    @Data
+    public static class LlamaIndex {
+        /** 是否启用 LlamaIndex Cloud 解析（仅对 PDF 生效） */
+        private boolean enabled = true;
+        /** LlamaCloud API Key（也可通过环境变量 LLAMA_CLOUD_API_KEY 注入） */
+        private String apiKey = "llx-mEpMFEoBrnhwZow0q1blHBeCXheiEGBcFHxdL2qkHSuUXQAk";
+        /** LlamaCloud API Base URL */
+        private String baseUrl = "https://api.cloud.llamaindex.ai";
+        /** Parsing tier: AGENTIC / STANDARD */
+        private String tier = "AGENTIC";
+        /** 轮询 job 状态间隔（毫秒） */
+        private long pollIntervalMs = 3000L;
+        /** 单个 job 最大等待时间（毫秒），默认 5 分钟 */
+        private long jobTimeoutMs = 300000L;
     }
 }

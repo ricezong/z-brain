@@ -123,6 +123,12 @@
             <version>${tika.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>ai.llamaindex</groupId>
+            <artifactId>llama-cloud</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- ==================== 工具库 ==================== -->
         <dependency>
             <groupId>cn.hutool</groupId>
@@ -222,6 +228,14 @@
             <id>aliyun-public</id>
             <name>aliyun-public</name>
             <url>https://maven.aliyun.com/repository/public</url>
+        </repository>
+        <!-- 直连 Maven Central,绕过 settings.xml 中 alimaven mirror(阿里云镜像同步滞后) -->
+        <repository>
+            <id>maven-central-direct</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
         </repository>
     </repositories>
 </project>

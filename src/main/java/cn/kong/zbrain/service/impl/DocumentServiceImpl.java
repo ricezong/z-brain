@@ -18,10 +18,12 @@ import cn.kong.zbrain.mapper.ChunkMapper;
 import cn.kong.zbrain.mapper.DocumentMapper;
 import cn.kong.zbrain.mapper.KnowledgeBaseMapper;
 import cn.kong.zbrain.parser.DocumentParser;
+import cn.kong.zbrain.parser.LlamaIndexPdfParser;
 import cn.kong.zbrain.service.DocumentService;
 import cn.kong.zbrain.service.EmbeddingTaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 文档服务实现
@@ -60,6 +63,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final ZBrainProperties properties;
     private final ObjectMapper objectMapper;
     private final EmbeddingTaskService embeddingTaskService;
+    private final LlamaIndexPdfParser llamaIndexPdfParser;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -141,12 +145,9 @@ public class DocumentServiceImpl implements DocumentService {
             documentMapper.updateStatus(documentId, DocumentStatus.PARSING.getCode(), null);
             updateProgress(document, 10, DocumentStatus.PARSING);
 
-            // 2. Tika 解析
+            // 2. 解析文档（PDF 优先走 LlamaIndex，其余走 Tika）
             File file = new File(document.getFilePath());
-            String text;
-            try (FileInputStream fis = new FileInputStream(file)) {
-                text = documentParser.parse(fis);
-            }
+            String text = parseDocument(document, file);
             updateProgress(document, 50, DocumentStatus.PARSING);
 
             // 3. 父子分块
@@ -331,6 +332,47 @@ public class DocumentServiceImpl implements DocumentService {
         embeddingTaskService.embedAsync(documentId);
 
         log.info("审核提交完成: docId={}, chunkCount={}", documentId, chunkCount);
+    }
+
+    /**
+     * 根据文件类型选择解析器
+     *
+     * <p>路由策略：
+     * <ul>
+     *   <li>PDF + LlamaIndex 已启用 → 调用 LlamaIndex Cloud Parsing API（高质量版面/表格解析）</li>
+     *   <li>LlamaIndex 调用失败（网络/超时/API 错误）→ 自动回退到 Tika，保证解析不中断</li>
+     *   <li>其余情况 → 直接走 Tika（DocumentParser）</li>
+     * </ul>
+     *
+     * @param document 文档实体（含 fileType / filePath）
+     * @param file     本地文件
+     * @return 解析后的纯文本
+     */
+    private String parseDocument(Document document, File file) {
+        String fileType = document.getFileType();
+        boolean isPdf = "pdf".equalsIgnoreCase(fileType);
+
+        // PDF 且 LlamaIndex 已启用 → 走 LlamaIndex，失败自动回退 Tika
+        if (isPdf && llamaIndexPdfParser != null) {
+            log.info("使用 LlamaIndex 解析 PDF: docId={}, fileName={}", document.getId(), document.getFileName());
+            try {
+                byte[] fileBytes = Files.readAllBytes(file.toPath());
+                return llamaIndexPdfParser.parse(fileBytes, document.getFileName());
+            } catch (Exception e) {
+                log.warn("LlamaIndex 解析失败，回退到 Tika: docId={}, fileName={}, error={}",
+                        document.getId(), document.getFileName(), e.getMessage());
+                // 继续走下面的 Tika 逻辑
+            }
+        }
+
+        // Tika 解析（LlamaIndex 未启用 / 非 PDF / LlamaIndex 失败回退）
+        log.info("使用 Tika 解析文档: docId={}, fileName={}, fileType={}",
+                document.getId(), document.getFileName(), fileType);
+        try (FileInputStream fis = new FileInputStream(file)) {
+            return documentParser.parse(fis);
+        } catch (IOException e) {
+            throw new BusinessException("读取文件失败: " + e.getMessage(), e);
+        }
     }
 
     private void updateProgress(Document document, int progress, DocumentStatus status) {

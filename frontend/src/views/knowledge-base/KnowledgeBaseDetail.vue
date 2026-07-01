@@ -34,6 +34,17 @@
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input type="text" placeholder="搜索文档..." v-model="searchQuery" />
         </div>
+        <button class="btn btn-primary" :disabled="uploading" @click="triggerUpload">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          {{ uploading ? '上传中...' : '上传文档' }}
+        </button>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.html,.xls,.xlsx"
+          style="display:none"
+          @change="handleFileChange"
+        />
       </div>
 
       <div class="doc-table">
@@ -99,6 +110,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { knowledgeBaseApi } from '@/api/knowledge-base'
 import { documentApi } from '@/api/document'
+import { ElMessage } from 'element-plus'
 import type { KnowledgeBase, Document } from '@/types'
 
 const route = useRoute()
@@ -110,6 +122,9 @@ const documents = ref<Document[]>([])
 const searchQuery = ref('')
 const showDeleteModal = ref(false)
 const deleteTarget = ref<Document | null>(null)
+
+const fileInput = ref<HTMLInputElement | null>(null)
+const uploading = ref(false)
 
 const filteredDocs = computed(() => {
   if (!searchQuery.value) return documents.value
@@ -159,6 +174,38 @@ async function loadKbDetail() {
 
 function openChunkReview(doc: Document) {
   router.push(`/documents/${doc.id}/chunks`)
+}
+
+/** 触发隐藏的 file input 点击 */
+function triggerUpload() {
+  fileInput.value?.click()
+}
+
+/** 文件选择回调 */
+async function handleFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  // 无论成功失败都重置 input，使同一文件可重复选择
+  target.value = ''
+  if (!file) return
+
+  const kbId = Number(route.params.kbId)
+  if (!kbId) {
+    ElMessage.warning('知识库 ID 无效')
+    return
+  }
+
+  uploading.value = true
+  try {
+    await documentApi.upload(kbId, file)
+    ElMessage.success(`「${file.name}」上传成功，正在后台解析`)
+    await loadKbDetail()
+  } catch (err) {
+    console.error('上传文档失败', err)
+    ElMessage.error('上传文档失败，请重试')
+  } finally {
+    uploading.value = false
+  }
 }
 
 function confirmDeleteDoc(doc: Document) {
@@ -272,6 +319,8 @@ watch(() => route.params.kbId, (newId, oldId) => {
   display: flex; align-items: center; gap: var(--s-3);
   margin-bottom: var(--s-4);
 }
+.doc-toolbar .btn { margin-left: auto; }
+.doc-toolbar .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .search-input { flex: 1; max-width: 320px; position: relative; }
 .search-input svg {
   position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
