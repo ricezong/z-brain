@@ -46,34 +46,18 @@ public class TokenUtils {
     /**
      * 按目标 Token 大小切分文本
      *
+     * <p>采用递归字符分块策略：按分隔符优先级（{@code \n\n → \n → 。→ ！→ ？→ ；→ . → 空格 → 强制切}）
+     * 递归降级切分，尽量在自然语义边界断开，避免把句子/段落从中间斩断。token 计数基于 jtokkit
+     * cl100k_base 精确计算，相邻块通过 overlap 滑动窗口保持上下文连续。</p>
+     *
+     * <p>实现委托给 {@link RecursiveCharacterSplitter}，具体切分逻辑见该类。</p>
+     *
      * @param text       原始文本
      * @param targetSize 目标 Token 大小
      * @param overlap    重叠 Token 数
      * @return 切分后的文本列表
      */
     public static List<String> splitByTokenSize(String text, int targetSize, int overlap) {
-        if (text == null || text.isEmpty()) {
-            return Collections.emptyList();
-        }
-        // 简化实现：按字符近似切分（1 Token ≈ 1.5 个中文字符 / 4 个英文字符）
-        // 生产环境建议使用编码后的 Token 列表精确切分
-        int avgCharsPerToken = 2;
-        int charSize = targetSize * avgCharsPerToken;
-        int overlapChars = overlap * avgCharsPerToken;
-
-        List<String> chunks = new java.util.ArrayList<>();
-        int start = 0;
-        while (start < text.length()) {
-            int end = Math.min(start + charSize, text.length());
-            chunks.add(text.substring(start, end));
-            if (end >= text.length()) {
-                break;
-            }
-            start = end - overlapChars;
-            if (start < 0) {
-                start = 0;
-            }
-        }
-        return chunks;
+        return RecursiveCharacterSplitter.split(text, targetSize, overlap);
     }
 }
