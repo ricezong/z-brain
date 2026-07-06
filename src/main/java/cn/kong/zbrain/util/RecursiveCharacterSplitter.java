@@ -133,11 +133,11 @@ public final class RecursiveCharacterSplitter {
     }
 
     /**
-     * 兜底：所有语义分隔符都无法切到目标大小以下时，按 token 强制硬切。
+     * 兜底：所有语义分隔符都无法切到目标大小以下时，按 token 强制切分。
      *
      * <p>回退策略：取 targetSize 个 token 对应的文本后，向前查找最近的标点符号，
-     * 在标点处截断（包含标点），避免从句子中间截断。若标点位置过靠前（不足文本一半），
-     * 则放弃回退直接硬切，避免产生过小的碎片。</p>
+     * 在标点处截断（包含标点），避免从句子中间截断。只要找到标点符号就在标点处切分，
+     * 不做距离限制；仅当整段文本完全无标点符号时，才兜底硬切。</p>
      */
     private static List<String> forceSplitByTokens(String text, int targetSize) {
         List<String> result = new ArrayList<>();
@@ -157,12 +157,12 @@ public final class RecursiveCharacterSplitter {
 
             // 向前查找最近的标点符号，在标点处截断
             int cutPos = findLastPunctuation(chunkText);
-            if (cutPos > chunkText.length() / 2) {
-                // 标点位置合理（超过文本一半）→ 在标点处截断（包含标点）
+            if (cutPos > 0) {
+                // 找到标点符号 → 在标点处截断（包含标点），不硬切
                 result.add(chunkText.substring(0, cutPos + 1));
                 remaining = remaining.substring(cutPos + 1);
             } else {
-                // 标点过靠前或不存在 → 直接硬切
+                // 整段无标点符号 → 兜底硬切
                 result.add(chunkText);
                 remaining = remaining.substring(chunkText.length());
             }
@@ -230,7 +230,7 @@ public final class RecursiveCharacterSplitter {
      * <p>向前查找最近的标点符号，从标点之后的字符开始截取作为 overlap，
      * 标点本身保留在前一个块中。这样下一子块的 overlap 从句子开头开始，
      * 避免从句子中间截断，也不会在分块开头出现孤立的标点符号。
-     * 最多向前查找 20 个字符。</p>
+     * 向前查找不受距离限制，直到找到标点符号或到达文本起始位置。</p>
      */
     private static String tailByTokens(String text, int maxTokens) {
         IntArrayList tokens = ENCODING.encode(text);
@@ -244,10 +244,10 @@ public final class RecursiveCharacterSplitter {
         }
         String tailStr = ENCODING.decode(tail);
 
-        // 尝试在原文中定位 tailStr 的起始位置，向前查找标点符号
+        // 尝试在原文中定位 tailStr 的起始位置，向前查找最近的标点符号
         int tailPos = text.lastIndexOf(tailStr);
         if (tailPos > 0) {
-            for (int i = tailPos - 1; i >= 0 && i >= tailPos - 20; i--) {
+            for (int i = tailPos - 1; i >= 0; i--) {
                 if (PUNCTUATION.indexOf(text.charAt(i)) >= 0) {
                     // 标点保留在前一个块，overlap 从标点之后开始
                     return text.substring(i + 1);
