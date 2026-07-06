@@ -33,12 +33,12 @@ public class ChatController {
 
     private static final long SSE_TIMEOUT = 300_000L; // 5 分钟
 
-    @Operation(summary = "同步问答")
+    /*@Operation(summary = "同步问答")
     @PostMapping("/sync")
     public Result<ChatResponse> chat(@Valid @RequestBody ChatRequest request) {
         request.setStream(false);
         return Result.success(chatService.chat(request));
-    }
+    }*/
 
     @Operation(summary = "流式问答（SSE）")
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -57,7 +57,7 @@ public class ChatController {
         return emitter;
     }
 
-    @Operation(summary = "Query 改写（独立接口）")
+    @Operation(summary = "优化输入，增强提示词")
     @PostMapping("/rewrite")
     public Result<RewriteResponse> rewriteQuery(@Valid @RequestBody RewriteRequest request) {
         String rewritten = queryPreprocessService.rewriteQuery(
