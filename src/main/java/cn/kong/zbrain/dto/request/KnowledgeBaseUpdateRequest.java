@@ -1,5 +1,6 @@
 package cn.kong.zbrain.dto.request;
 
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 
 /**
@@ -14,4 +15,8 @@ public class KnowledgeBaseUpdateRequest {
     private String category;
     private Long promptTemplateId;
     private String status;
+
+    /** 分块大小（Token 数），更新时可选 */
+    @Min(value = 64, message = "分块大小不能小于 64")
+    private Integer chunkSize;
 }

@@ -16,12 +16,13 @@ public interface DocumentService {
     /**
      * 上传文档（异步解析）
      *
-     * @param kbId   知识库 ID
-     * @param file   上传的文件
-     * @param userId 用户 ID
+     * @param kbId      知识库 ID
+     * @param file      上传的文件
+     * @param userId    用户 ID
+     * @param chunkSize 分块大小（Token 数），为 null 时使用知识库配置
      * @return 文档 ID
      */
-    Long upload(Long kbId, MultipartFile file, String userId);
+    Long upload(Long kbId, MultipartFile file, String userId, Integer chunkSize);
 
     /**
      * 触发异步解析与分块

@@ -67,7 +67,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long upload(Long kbId, MultipartFile file, String userId) {
+    public Long upload(Long kbId, MultipartFile file, String userId, Integer chunkSize) {
         // 1. 校验知识库
         KnowledgeBase kb = knowledgeBaseMapper.selectById(kbId);
         if (kb == null) {
@@ -106,6 +106,8 @@ public class DocumentServiceImpl implements DocumentService {
         document.setFileSize(file.getSize());
         document.setFileType(fileType);
         document.setFileHash(fileHash);
+        // 分块大小：文档未设置则使用知识库的分块大小
+        document.setChunkSize(chunkSize != null ? chunkSize : kb.getChunkSize());
         document.setStatus(DocumentStatus.PENDING.getCode());
         document.setChunkCount(0);
         document.setParseProgress(0);
@@ -151,7 +153,7 @@ public class DocumentServiceImpl implements DocumentService {
             updateProgress(document, 50, DocumentStatus.PARSING);
 
             // 3. Markdown 语义边界父子分块（第1步：##/表格父块切分，第2步：递归字符子块切分）
-            List<Chunk> chunks = chunkingEngine.chunk(markdown, documentId, document.getKbId());
+            List<Chunk> chunks = chunkingEngine.chunk(markdown, documentId, document.getKbId(), document.getChunkSize());
             updateProgress(document, 80, DocumentStatus.PARSING);
 
             // 4. 批量写入分块

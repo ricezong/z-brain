@@ -35,7 +35,7 @@ public class KnowledgeBaseController {
 
     @Operation(summary = "更新知识库")
     @PutMapping("/{id}")
-    public Result<Void> update(@PathVariable Long id, @RequestBody KnowledgeBaseUpdateRequest request) {
+    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody KnowledgeBaseUpdateRequest request) {
         knowledgeBaseService.update(id, request);
         return Result.success();
     }

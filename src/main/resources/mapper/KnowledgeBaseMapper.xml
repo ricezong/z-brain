@@ -8,6 +8,7 @@
         <result column="description"         property="description"/>
         <result column="category"            property="category"/>
         <result column="prompt_template_id"  property="promptTemplateId"/>
+        <result column="chunk_size"           property="chunkSize"/>
         <result column="status"              property="status"/>
         <result column="doc_count"           property="docCount"/>
         <result column="chunk_count"         property="chunkCount"/>
@@ -18,16 +19,16 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, name, description, category, prompt_template_id, status, doc_count, chunk_count,
+        id, name, description, category, prompt_template_id, chunk_size, status, doc_count, chunk_count,
         create_by, update_by, create_time, update_time
     </sql>
 
     <insert id="insert" parameterType="cn.kong.zbrain.entity.KnowledgeBase" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kb_knowledge_base
-            (name, description, category, prompt_template_id, status, doc_count, chunk_count, create_by, update_by)
+            (name, description, category, prompt_template_id, chunk_size, status, doc_count, chunk_count, create_by, update_by)
         VALUES
             (#{name}, #{description}, #{category}, #{promptTemplateId},
-             COALESCE(#{status}, 'active'), COALESCE(#{docCount}, 0), COALESCE(#{chunkCount}, 0),
+             COALESCE(#{chunkSize}, 256), COALESCE(#{status}, 'active'), COALESCE(#{docCount}, 0), COALESCE(#{chunkCount}, 0),
              COALESCE(#{createBy}, 'system'), COALESCE(#{updateBy}, 'system'))
     </insert>
 
@@ -38,6 +39,7 @@
             <if test="description != null">description = #{description},</if>
             <if test="category != null">category = #{category},</if>
             <if test="promptTemplateId != null">prompt_template_id = #{promptTemplateId},</if>
+            <if test="chunkSize != null">chunk_size = #{chunkSize},</if>
             <if test="status != null">status = #{status},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
         </set>

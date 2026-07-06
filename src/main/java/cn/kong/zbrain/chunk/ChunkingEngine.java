@@ -22,12 +22,13 @@ public interface ChunkingEngine {
     /**
      * 对文本进行父子分块
      *
-     * @param text    清洗后的文本
-     * @param docId   文档 ID
-     * @param kbId    知识库 ID
+     * @param text      清洗后的文本
+     * @param docId     文档 ID
+     * @param kbId      知识库 ID
+     * @param chunkSize 子块 Token 大小（为 null 时使用默认配置）
      * @return 分块列表（父块在前，子块在后）
      */
-    List<Chunk> chunk(String text, Long docId, Long kbId);
+    List<Chunk> chunk(String text, Long docId, Long kbId, Integer chunkSize);
 
     /**
      * 对单个文本进行子块切分

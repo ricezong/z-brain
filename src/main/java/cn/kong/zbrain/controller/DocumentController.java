@@ -30,8 +30,9 @@ public class DocumentController {
     public Result<Long> upload(
             @RequestParam("kbId") Long kbId,
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "userId", required = false) String userId) {
-        Long docId = documentService.upload(kbId, file, userId);
+            @RequestParam(value = "userId", required = false) String userId,
+            @RequestParam(value = "chunkSize", required = false) Integer chunkSize) {
+        Long docId = documentService.upload(kbId, file, userId, chunkSize);
         documentService.parseAsync(docId);
         return Result.success(docId);
     }

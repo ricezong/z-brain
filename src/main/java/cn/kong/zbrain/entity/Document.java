@@ -27,6 +27,8 @@ public class Document {
     private Long fileSize;
     private String fileType;
     private String fileHash;
+    /** 分块大小（Token 数），为 null 时使用知识库的 chunkSize */
+    private Integer chunkSize;
     /** pending / parsing / pending_review / embedding / success / failed */
     private String status;
     private Integer chunkCount;

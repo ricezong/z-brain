@@ -60,10 +60,14 @@ public class DefaultChunkingEngine implements ChunkingEngine {
     private final ObjectMapper objectMapper;
 
     @Override
-    public List<Chunk> chunk(String markdownText, Long docId, Long kbId) {
+    public List<Chunk> chunk(String markdownText, Long docId, Long kbId, Integer chunkSize) {
         if (markdownText == null || markdownText.isBlank()) {
             return new ArrayList<>();
         }
+
+        // 子块 Token 大小：优先使用传入的 chunkSize，未传则回退到全局配置
+        int effectiveChildTokenSize = (chunkSize != null && chunkSize > 0)
+                ? chunkSize : properties.getChunk().getChildTokenSize();
 
         // ──────────── 预处理：规范化 PDF 解析产生的虚假换行 ────────────
         markdownText = normalizePdfLineBreaks(markdownText);
@@ -107,7 +111,7 @@ public class DefaultChunkingEngine implements ChunkingEngine {
             result.add(parent);
 
             // 切分子块（parentId 暂时为 null，由 Service 层插入后回填）
-            List<Chunk> children = splitToChildren(pc.content, null, docId, kbId, pc.startOffset);
+            List<Chunk> children = splitToChildren(pc.content, null, docId, kbId, pc.startOffset, effectiveChildTokenSize);
             result.addAll(children);
         }
 
@@ -132,17 +136,33 @@ public class DefaultChunkingEngine implements ChunkingEngine {
      */
     @Override
     public List<Chunk> splitToChildren(String parentContent, Long parentId, Long docId, Long kbId, int globalOffset) {
+        return splitToChildren(parentContent, parentId, docId, kbId, globalOffset, null);
+    }
+
+    /**
+     * 对父块内容进行递归字符切分生成子块（支持自定义子块大小）。
+     *
+     * @param parentContent    父块纯文本内容
+     * @param parentId         父块 ID（可为 null，由 Service 层回填）
+     * @param docId            文档 ID
+     * @param kbId             知识库 ID
+     * @param globalOffset     父块在原文中的起始偏移
+     * @param childTokenSize   子块 Token 大小（为 null 时使用默认配置）
+     * @return 子块列表
+     */
+    public List<Chunk> splitToChildren(String parentContent, Long parentId, Long docId, Long kbId, int globalOffset, Integer childTokenSize) {
         List<Chunk> children = new ArrayList<>();
         if (parentContent == null || parentContent.isBlank()) {
             return children;
         }
 
-        int childTokenSize = properties.getChunk().getChildTokenSize();
+        int effectiveChildTokenSize = (childTokenSize != null && childTokenSize > 0)
+                ? childTokenSize : properties.getChunk().getChildTokenSize();
         int childOverlap = properties.getChunk().getTokenOverlap();
 
         // 使用递归字符分块器，采用中文优先分隔符
         List<String> childTexts = RecursiveCharacterSplitter.split(
-                parentContent, childTokenSize, childOverlap);
+                parentContent, effectiveChildTokenSize, childOverlap);
 
         int localOffset = 0;
         for (String childText : childTexts) {

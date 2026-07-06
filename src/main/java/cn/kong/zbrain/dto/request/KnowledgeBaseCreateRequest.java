@@ -1,6 +1,8 @@
 package cn.kong.zbrain.dto.request;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -15,4 +17,9 @@ public class KnowledgeBaseCreateRequest {
     private String description;
     private String category;
     private Long promptTemplateId;
+
+    /** 分块大小（Token 数），必填，默认 256 */
+    @NotNull(message = "分块大小不能为空")
+    @Min(value = 64, message = "分块大小不能小于 64")
+    private Integer chunkSize = 256;
 }

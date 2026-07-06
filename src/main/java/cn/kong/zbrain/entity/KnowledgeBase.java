@@ -16,6 +16,8 @@ public class KnowledgeBase {
     private String description;
     private String category;
     private Long promptTemplateId;
+    /** 分块大小（Token 数），默认 256 */
+    private Integer chunkSize;
     private String status;
     private Integer docCount;
     private Integer chunkCount;

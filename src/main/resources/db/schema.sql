@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS kb_knowledge_base (
     description     VARCHAR(512),
     category        VARCHAR(64)   DEFAULT 'general',
     prompt_template_id BIGINT,
+    chunk_size      INT           NOT NULL DEFAULT 256,  -- 分块大小（Token 数），默认 256
     status          VARCHAR(16)   DEFAULT 'active',  -- active / archived
     doc_count       INT           DEFAULT 0,
     chunk_count     INT           DEFAULT 0,
@@ -40,6 +41,7 @@ COMMENT ON COLUMN kb_knowledge_base.id IS '主键 ID';
 COMMENT ON COLUMN kb_knowledge_base.name IS '知识库名称';
 COMMENT ON COLUMN kb_knowledge_base.category IS '知识库分类';
 COMMENT ON COLUMN kb_knowledge_base.prompt_template_id IS '关联提示词模板 ID';
+COMMENT ON COLUMN kb_knowledge_base.chunk_size IS '分块大小（Token 数），默认 256';
 COMMENT ON COLUMN kb_knowledge_base.status IS '状态：active-启用，archived-归档';
 
 CREATE INDEX IF NOT EXISTS idx_kb_kb_status ON kb_knowledge_base(status);
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS kb_document (
     file_size       BIGINT,
     file_type       VARCHAR(32),
     file_hash       VARCHAR(64),
+    chunk_size      INT,                            -- 分块大小（Token 数），NULL 时使用知识库配置
     status          VARCHAR(32)   DEFAULT 'pending',
     -- pending-待解析 / parsing-解析中 / pending_review-待审核
     -- embedding-向量化中 / success-完成 / failed-失败
@@ -84,6 +87,7 @@ CREATE TABLE IF NOT EXISTS kb_document (
 );
 COMMENT ON TABLE  kb_document IS '文档表';
 COMMENT ON COLUMN kb_document.status IS '文档状态机：pending/parsing/pending_review/embedding/success/failed';
+COMMENT ON COLUMN kb_document.chunk_size IS '分块大小（Token 数），NULL 时使用知识库的 chunk_size';
 
 CREATE INDEX IF NOT EXISTS idx_kb_doc_kbid ON kb_document(kb_id);
 CREATE INDEX IF NOT EXISTS idx_kb_doc_status ON kb_document(status);
