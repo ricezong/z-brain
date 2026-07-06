@@ -44,6 +44,9 @@ public final class RecursiveCharacterSplitter {
             "\n\n", "\n", "。", "！", "？", "；", ".", "!", "?", ";", " ", ""
     );
 
+    /** 标点符号集合（用于 forceSplit 兜底切分时回退到句子边界） */
+    private static final String PUNCTUATION = "。！？；，.,!?;:";
+
     private RecursiveCharacterSplitter() {
     }
 
@@ -131,23 +134,55 @@ public final class RecursiveCharacterSplitter {
 
     /**
      * 兜底：所有语义分隔符都无法切到目标大小以下时，按 token 强制硬切。
+     *
+     * <p>回退策略：取 targetSize 个 token 对应的文本后，向前查找最近的标点符号，
+     * 在标点处截断（包含标点），避免从句子中间截断。若标点位置过靠前（不足文本一半），
+     * 则放弃回退直接硬切，避免产生过小的碎片。</p>
      */
     private static List<String> forceSplitByTokens(String text, int targetSize) {
-        IntArrayList tokens = ENCODING.encode(text);
-        if (tokens.isEmpty()) {
-            return Collections.emptyList();
-        }
         List<String> result = new ArrayList<>();
-        int total = tokens.size();
-        for (int i = 0; i < total; i += targetSize) {
-            int end = Math.min(i + targetSize, total);
-            IntArrayList chunk = new IntArrayList(end - i);
-            for (int j = i; j < end; j++) {
-                chunk.add(tokens.get(j));
+        String remaining = text;
+        while (!remaining.isEmpty()) {
+            IntArrayList tokens = ENCODING.encode(remaining);
+            if (tokens.size() <= targetSize) {
+                result.add(remaining);
+                break;
             }
-            result.add(ENCODING.decode(chunk));
+            // 取前 targetSize 个 token 解码为文本（是 remaining 的前缀）
+            IntArrayList chunkTokens = new IntArrayList(targetSize);
+            for (int j = 0; j < targetSize; j++) {
+                chunkTokens.add(tokens.get(j));
+            }
+            String chunkText = ENCODING.decode(chunkTokens);
+
+            // 向前查找最近的标点符号，在标点处截断
+            int cutPos = findLastPunctuation(chunkText);
+            if (cutPos > chunkText.length() / 2) {
+                // 标点位置合理（超过文本一半）→ 在标点处截断（包含标点）
+                result.add(chunkText.substring(0, cutPos + 1));
+                remaining = remaining.substring(cutPos + 1);
+            } else {
+                // 标点过靠前或不存在 → 直接硬切
+                result.add(chunkText);
+                remaining = remaining.substring(chunkText.length());
+            }
         }
         return result;
+    }
+
+    /**
+     * 在文本中从后向前查找最近的标点符号位置。
+     *
+     * @param text 文本
+     * @return 最后一个标点符号的索引，无标点返回 -1
+     */
+    private static int findLastPunctuation(String text) {
+        for (int i = text.length() - 1; i >= 0; i--) {
+            if (PUNCTUATION.indexOf(text.charAt(i)) >= 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -191,6 +226,11 @@ public final class RecursiveCharacterSplitter {
 
     /**
      * 取文本末尾 maxTokens 个 token 对应的字符串（用于 overlap 滑动窗口）。
+     *
+     * <p>向前查找最近的标点符号，从标点之后的字符开始截取作为 overlap，
+     * 标点本身保留在前一个块中。这样下一子块的 overlap 从句子开头开始，
+     * 避免从句子中间截断，也不会在分块开头出现孤立的标点符号。
+     * 最多向前查找 20 个字符。</p>
      */
     private static String tailByTokens(String text, int maxTokens) {
         IntArrayList tokens = ENCODING.encode(text);
@@ -202,7 +242,20 @@ public final class RecursiveCharacterSplitter {
         for (int j = from; j < tokens.size(); j++) {
             tail.add(tokens.get(j));
         }
-        return ENCODING.decode(tail);
+        String tailStr = ENCODING.decode(tail);
+
+        // 尝试在原文中定位 tailStr 的起始位置，向前查找标点符号
+        int tailPos = text.lastIndexOf(tailStr);
+        if (tailPos > 0) {
+            for (int i = tailPos - 1; i >= 0 && i >= tailPos - 20; i--) {
+                if (PUNCTUATION.indexOf(text.charAt(i)) >= 0) {
+                    // 标点保留在前一个块，overlap 从标点之后开始
+                    return text.substring(i + 1);
+                }
+            }
+        }
+
+        return tailStr;
     }
 
     private static int countTokens(String text) {

@@ -63,7 +63,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final ZBrainProperties properties;
     private final ObjectMapper objectMapper;
     private final EmbeddingTaskService embeddingTaskService;
-    private final LlamaIndexPdfParser llamaIndexPdfParser;
+    private final ObjectProvider<LlamaIndexPdfParser> llamaIndexPdfParserProvider;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -145,13 +145,13 @@ public class DocumentServiceImpl implements DocumentService {
             documentMapper.updateStatus(documentId, DocumentStatus.PARSING.getCode(), null);
             updateProgress(document, 10, DocumentStatus.PARSING);
 
-            // 2. 解析文档（PDF 优先走 LlamaIndex，其余走 Tika）
+            // 2. 解析文档为 Markdown（统一中间格式：Tika HTML → JSoup → Markdown）
             File file = new File(document.getFilePath());
-            String text = parseDocument(document, file);
+            String markdown = parseDocumentToMarkdown(document, file);
             updateProgress(document, 50, DocumentStatus.PARSING);
 
-            // 3. 父子分块
-            List<Chunk> chunks = chunkingEngine.chunk(text, documentId, document.getKbId());
+            // 3. Markdown 语义边界父子分块（第1步：##/表格父块切分，第2步：递归字符子块切分）
+            List<Chunk> chunks = chunkingEngine.chunk(markdown, documentId, document.getKbId());
             updateProgress(document, 80, DocumentStatus.PARSING);
 
             // 4. 批量写入分块
@@ -335,44 +335,63 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     /**
-     * 根据文件类型选择解析器
+     * 将文档解析为 Markdown（统一格式，保留语义结构）。
      *
      * <p>路由策略：
      * <ul>
-     *   <li>PDF + LlamaIndex 已启用 → 调用 LlamaIndex Cloud Parsing API（高质量版面/表格解析）</li>
-     *   <li>LlamaIndex 调用失败（网络/超时/API 错误）→ 自动回退到 Tika，保证解析不中断</li>
-     *   <li>其余情况 → 直接走 Tika（DocumentParser）</li>
+     *   <li>PDF + LlamaIndex 已启用 → LlamaIndex Cloud Parsing（原生 Markdown）</li>
+     *   <li>LlamaIndex 失败 → 回退到 Tika HTML → JSoup → Markdown</li>
+     *   <li>其余格式 → Tika HTML 解析 + JSoup 转 Markdown</li>
      * </ul>
      *
-     * @param document 文档实体（含 fileType / filePath）
+     * @param document 文档实体
      * @param file     本地文件
-     * @return 解析后的纯文本
+     * @return Markdown 格式文本（含 ## 标题、| | 表格）
      */
-    private String parseDocument(Document document, File file) {
+    private String parseDocumentToMarkdown(Document document, File file) {
         String fileType = document.getFileType();
         boolean isPdf = "pdf".equalsIgnoreCase(fileType);
 
-        // PDF 且 LlamaIndex 已启用 → 走 LlamaIndex，失败自动回退 Tika
-        if (isPdf && llamaIndexPdfParser != null) {
-            log.info("使用 LlamaIndex 解析 PDF: docId={}, fileName={}", document.getId(), document.getFileName());
+        // PDF 且 LlamaIndex 已启用 → LlamaIndex（原生 Markdown），失败回退
+        LlamaIndexPdfParser llamaIndexParser = llamaIndexPdfParserProvider.getIfAvailable();
+        if (isPdf && llamaIndexParser != null) {
+            log.info("使用 LlamaIndex 解析 PDF (Markdown): docId={}", document.getId());
             try {
                 byte[] fileBytes = Files.readAllBytes(file.toPath());
-                return llamaIndexPdfParser.parse(fileBytes, document.getFileName());
+                return llamaIndexParser.parse(fileBytes, document.getFileName());
             } catch (Exception e) {
-                log.warn("LlamaIndex 解析失败，回退到 Tika: docId={}, fileName={}, error={}",
-                        document.getId(), document.getFileName(), e.getMessage());
-                // 继续走下面的 Tika 逻辑
+                log.warn("LlamaIndex 解析失败，回退到 Tika→Markdown: docId={}", document.getId());
             }
         }
 
-        // Tika 解析（LlamaIndex 未启用 / 非 PDF / LlamaIndex 失败回退）
-        log.info("使用 Tika 解析文档: docId={}, fileName={}, fileType={}",
-                document.getId(), document.getFileName(), fileType);
+        // Tika HTML → JSoup → Markdown（统一归一化管线）
+        log.info("使用 Tika→Markdown 解析文档: docId={}, fileType={}", document.getId(), fileType);
         try (FileInputStream fis = new FileInputStream(file)) {
-            return documentParser.parse(fis);
-        } catch (IOException e) {
-            throw new BusinessException("读取文件失败: " + e.getMessage(), e);
+            return documentParser.parseToMarkdown(fis);
+        } catch (Exception e) {
+            log.warn("Tika→Markdown 解析失败，回退到纯文本包装: docId={}", document.getId());
+            try (FileInputStream fis = new FileInputStream(file)) {
+                return wrapPlainTextAsMarkdown(documentParser.parse(fis));
+            } catch (IOException ioe) {
+                throw new BusinessException("读取文件失败: " + ioe.getMessage(), ioe);
+            }
         }
+    }
+
+    /**
+     * 将纯文本包装为简单 Markdown（每段落空行分隔）
+     */
+    private String wrapPlainTextAsMarkdown(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String line : text.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) continue;
+            sb.append(trimmed).append("\n\n");
+        }
+        return sb.toString().trim();
     }
 
     private void updateProgress(Document document, int progress, DocumentStatus status) {

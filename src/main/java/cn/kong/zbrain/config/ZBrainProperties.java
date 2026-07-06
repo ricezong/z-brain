@@ -55,12 +55,14 @@ public class ZBrainProperties {
 
     @Data
     public static class Chunk {
-        /** 父块 Token 大小 */
-        private int parentTokenSize = 1000;
-        /** 子块 Token 大小 */
-        private int childTokenSize = 200;
-        /** Token 重叠 */
-        private int tokenOverlap = 50;
+        /** 父块最小 Token 数（语义边界控制下限） */
+        private int parentMinTokenSize = 512;
+        /** 父块最大 Token 数（语义边界控制上限） */
+        private int parentMaxTokenSize = 2048;
+        /** 子块 Token 大小（递归字符分块 chunk_size） */
+        private int childTokenSize = 256;
+        /** 子块 Token 重叠（约为 chunk_size 的 12.5%） */
+        private int tokenOverlap = 32;
     }
 
     @Data

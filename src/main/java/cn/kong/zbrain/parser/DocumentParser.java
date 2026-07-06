@@ -8,18 +8,27 @@ import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
 import org.apache.tika.sax.BodyContentHandler;
+import org.apache.tika.sax.ToHTMLContentHandler;
 import org.springframework.stereotype.Component;
 import org.xml.sax.SAXException;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 /**
  * 文档解析器（基于 Apache Tika）
  *
- * <p>支持 PDF / Word / PPT / Excel / TXT / Markdown / HTML 等多种格式，
- * 解析为纯文本并进行基础清洗。</p>
+ * <p>支持 PDF / Word / PPT / Excel / TXT / Markdown / HTML 等多种格式。
+ * 解析后统一输出为 Markdown，供下游语义分块引擎使用。</p>
+ *
+ * <p>解析模式：</p>
+ * <ul>
+ *   <li>{@link #parseToMarkdown(InputStream)} — Tika HTML 解析 + JSoup 转 Markdown（统一入口）</li>
+ *   <li>{@link #parse(InputStream)} — Tika 纯文本解析（向下兼容）</li>
+ * </ul>
  *
  * @author zbrain-team
  */
@@ -45,7 +54,7 @@ public class DocumentParser {
             Pattern.compile("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]");
 
     /**
-     * 解析文档为纯文本
+     * 解析文档为纯文本（向下兼容）
      *
      * @param inputStream 文件输入流
      * @return 清洗后的纯文本
@@ -64,6 +73,39 @@ public class DocumentParser {
         } catch (IOException | TikaException | SAXException e) {
             log.error("文档解析失败", e);
             throw new BusinessException("文档解析失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 解析文档为 Markdown 格式（统一入口，保留语义结构）。
+     *
+     * <p>管线：Tika ToHTMLContentHandler 输出 HTML → JSoup 转 Markdown。
+     * 输出为标准的 Markdown（含 ## 标题、| | 表格语法），
+     * 供 {@code MarkdownSemanticChunker} 进行语义边界分块。</p>
+     *
+     * <p>对于本身无标题层级的文档（如部分 PDF），
+     * Markdown 中可能只有普通段落，此时分块引擎会自动
+     * 退回"按段落边界 + 滑动窗口合并"策略。</p>
+     *
+     * @param inputStream 文件输入流
+     * @return Markdown 格式文本
+     */
+    public String parseToMarkdown(InputStream inputStream) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ToHTMLContentHandler handler = new ToHTMLContentHandler(baos, StandardCharsets.UTF_8.name());
+            Metadata metadata = new Metadata();
+            ParseContext context = new ParseContext();
+            Parser parser = new AutoDetectParser();
+
+            parser.parse(inputStream, handler, metadata, context);
+            String html = baos.toString(StandardCharsets.UTF_8);
+
+            // 格式归一化：HTML → Markdown
+            return HtmlToMarkdownConverter.convert(html);
+        } catch (IOException | TikaException | SAXException e) {
+            log.warn("Markdown 解析失败，回退到纯文本: {}", e.getMessage());
+            throw new BusinessException("文档 Markdown 解析失败: " + e.getMessage(), e);
         }
     }
 
