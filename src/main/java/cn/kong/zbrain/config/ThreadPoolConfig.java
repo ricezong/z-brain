@@ -8,12 +8,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * 双线程池配置
+ * 多线程池配置
  *
- * <p>方案核心设计：通过双线程池隔离资源，防止相互阻塞。</p>
+ * <p>方案核心设计：通过线程池隔离资源，防止相互阻塞。</p>
  * <ul>
  *   <li><b>解析池 (parseExecutor)</b>：处理 CPU/IO 密集型任务（文档解析、Tika 抽取）</li>
  *   <li><b>向量化池 (embeddingExecutor)</b>：处理强 IO 依赖任务（调用百炼 SDK）</li>
+ *   <li><b>检索池 (retrievalExecutor)</b>：并行执行多路召回（向量 + 全文），隔离检索耗时</li>
  * </ul>
  *
  * @author zbrain-team
@@ -57,6 +58,27 @@ public class ThreadPoolConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(120);
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * 检索线程池
+     * <p>用于并行执行多路召回（向量检索 + 全文检索），每路召回占用一个线程。</p>
+     * <p>线程数需与 HikariCP 连接池配合：每个检索线程最多占用 1 个 DB 连接，
+     * 峰值并发 = corePoolSize，不应超过 HikariCP maximum-pool-size 的一半。</p>
+     */
+    @Bean("retrievalExecutor")
+    public Executor retrievalExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(8);
+        executor.setMaxPoolSize(16);
+        executor.setQueueCapacity(200);
+        executor.setKeepAliveSeconds(60);
+        executor.setThreadNamePrefix("zbrain-retrieval-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
         executor.initialize();
         return executor;
     }

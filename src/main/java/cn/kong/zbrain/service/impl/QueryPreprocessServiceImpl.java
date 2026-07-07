@@ -1,8 +1,10 @@
 package cn.kong.zbrain.service.impl;
 
 import cn.kong.zbrain.cache.ChatContextCache;
+import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.QueryPreprocessService;
+import cn.kong.zbrain.service.SysPromptService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,7 +15,8 @@ import java.util.regex.Pattern;
 /**
  * 查询预处理服务实现
  *
- * <p>实现意图识别、Query 改写、HyDE 三大能力。</p>
+ * <p>实现意图识别、Query 改写、HyDE 三大能力。
+ * 所有提示词从数据库 sys_prompt 表读取，不再硬编码。</p>
  *
  * @author zbrain-team
  */
@@ -24,6 +27,8 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
 
     private final LLMService llmService;
     private final ChatContextCache chatContextCache;
+    private final ZBrainProperties properties;
+    private final SysPromptService sysPromptService;
 
     /** 闲聊关键词模式（必须完全匹配才判定为闲聊） */
     private static final Pattern CHITCHAT_PATTERN = Pattern.compile(
@@ -79,21 +84,16 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
                 historyText.append(msg.role()).append(": ").append(msg.content()).append("\n");
             }
 
-            String prompt = """
-                    你是一个查询改写助手。根据以下多轮对话历史，将用户的最新问题改写为一个独立、完整、清晰的查询。
-                    要求：
-                    1. 解决指代不清的问题（如"它"、"这个"、"那个"等代词替换为具体对象）
-                    2. 保持原意，不要扩展或改变用户意图
-                    3. 补充必要的上下文信息，使查询自包含
-                    4. 直接输出改写后的查询，不要有任何解释或前缀
+            // 从数据库读取提示词模板
+            String promptTemplate = sysPromptService.getContent("query_rewrite");
+            if (promptTemplate == null) {
+                log.warn("query_rewrite 提示词未配置，使用原始查询");
+                return query;
+            }
 
-                    对话历史：
-                    %s
-
-                    最新问题：%s
-
-                    改写后的查询：
-                    """.formatted(historyText, query);
+            String prompt = promptTemplate
+                    .replace("{history}", historyText.toString())
+                    .replace("{query}", query);
 
             String rewritten = llmService.simpleChat(prompt);
             return rewritten == null ? query : rewritten.trim();
@@ -111,18 +111,14 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
      */
     private String extractKeywords(String query) {
         try {
-            String prompt = """
-                    请从以下查询中提取核心关键词，并扩展为更适合语义检索的形式。
-                    要求：
-                    1. 去除"的"、"了"、"是"等无意义停用词
-                    2. 补充相关同义词或上下位词
-                    3. 保持查询的核心语义不变
-                    4. 输出扩展后的查询文本，不超过 50 字，不要有任何解释或前缀
+            // 从数据库读取提示词模板
+            String promptTemplate = sysPromptService.getContent("keyword_extract");
+            if (promptTemplate == null) {
+                log.warn("keyword_extract 提示词未配置，使用原始查询");
+                return query;
+            }
 
-                    原始查询：%s
-
-                    扩展后的查询：
-                    """.formatted(query);
+            String prompt = promptTemplate.replace("{query}", query);
 
             String expanded = llmService.simpleChat(prompt);
             if (expanded != null && !expanded.isBlank() && expanded.trim().length() > 3) {
@@ -138,15 +134,14 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
     @Override
     public String generateHyDE(String query) {
         try {
-            String prompt = """
-                    请针对以下问题，生成一段简短的假设性答案（100-200字）。
-                    这段答案将用于向量检索，所以请尽可能包含与问题相关的关键词和概念。
-                    直接输出答案内容，不要有任何解释或前缀。
+            // 从数据库读取提示词模板
+            String promptTemplate = sysPromptService.getContent("hyde");
+            if (promptTemplate == null) {
+                log.warn("hyde 提示词未配置，使用原始查询");
+                return query;
+            }
 
-                    问题：%s
-
-                    假设性答案：
-                    """.formatted(query);
+            String prompt = promptTemplate.replace("{query}", query);
 
             String hyde = llmService.simpleChat(prompt);
             return hyde == null ? query : hyde.trim();
@@ -157,19 +152,20 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
     }
 
     @Override
-    public PreprocessResult preprocess(String query, String sessionId,
-                                       boolean enableQueryRewrite, boolean enableHyde) {
+    public PreprocessResult preprocess(String query, String sessionId) {
         boolean chitchat = isChitchat(query);
         List<ChatContextCache.ChatMessage> history = chatContextCache.getRecentMessages(sessionId, HISTORY_ROUNDS);
 
+        ZBrainProperties.QueryPreprocess qpConfig = properties.getQueryPreprocess();
+
         String rewrittenQuery = query;
-        if (enableQueryRewrite && !chitchat) {
+        if (qpConfig.isEnableQueryRewrite() && !chitchat) {
             rewrittenQuery = rewriteQuery(query, sessionId);
         }
 
         String hydeAnswer = null;
         String vectorQuery = rewrittenQuery;
-        if (enableHyde && !chitchat) {
+        if (qpConfig.isEnableHyde() && !chitchat) {
             hydeAnswer = generateHyDE(rewrittenQuery);
             // 确保 vectorQuery 不为 null
             if (hydeAnswer != null && !hydeAnswer.isBlank()) {

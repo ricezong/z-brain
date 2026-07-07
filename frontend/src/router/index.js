@@ -42,6 +42,12 @@ const routes = [
         name: 'PromptTemplate',
         component: () => import('@/views/PromptTemplate.vue'),
         meta: { title: '提示词模板', icon: 'EditPen' }
+      },
+      {
+        path: 'system-config',
+        name: 'SystemConfig',
+        component: () => import('@/views/SystemConfig.vue'),
+        meta: { title: '系统配置', icon: 'Setting' }
       }
     ]
   }

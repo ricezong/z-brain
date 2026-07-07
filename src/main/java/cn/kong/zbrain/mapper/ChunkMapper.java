@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 分块 Mapper（核心 Mapper）
  *
- * <p>包含向量相似度检索、全文检索、模糊匹配等复杂 SQL。</p>
+ * <p>包含向量相似度检索、全文检索等复杂 SQL。</p>
  *
  * @author zbrain-team
  */
@@ -75,14 +75,6 @@ public interface ChunkMapper {
     List<Chunk> fulltextRetrieve(@Param("kbId") Long kbId,
                                  @Param("query") String query,
                                  @Param("topK") int topK);
-
-    /**
-     * 模糊召回：基于 pg_trgm 的模糊匹配
-     */
-    List<Chunk> fuzzyRetrieve(@Param("kbId") Long kbId,
-                              @Param("query") String query,
-                              @Param("threshold") double threshold,
-                              @Param("topK") int topK);
 
     /**
      * 统计文档的分块数量

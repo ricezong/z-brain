@@ -42,6 +42,13 @@ public interface LLMService {
     String simpleChat(String prompt);
 
     /**
+     * 清除缓存的 ChatModel/ChatClient 实例
+     *
+     * <p>当数据库中的模型配置发生变更时调用，确保下次调用使用最新配置。</p>
+     */
+    void clearCache();
+
+    /**
      * 对话消息
      */
     record ChatMessage(String role, String content) {

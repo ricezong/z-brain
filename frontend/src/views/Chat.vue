@@ -6,17 +6,9 @@
         <h3 class="sidebar-title">问答设置</h3>
         <div class="setting-item">
           <label class="setting-label">知识库</label>
-          <el-select v-model="chatForm.kbId" placeholder="选择知识库" filterable style="width: 100%" @change="onKbChange">
+          <el-select v-model="chatForm.kbId" placeholder="全部知识库" filterable clearable style="width: 100%" @change="onKbChange">
             <el-option v-for="kb in kbList" :key="kb.id" :label="kb.name" :value="kb.id" />
           </el-select>
-        </div>
-        <div class="setting-item">
-          <label class="setting-label">增强选项</label>
-          <div class="switch-list">
-            <div class="switch-row"><span>HyDE 增强</span><el-switch v-model="chatForm.enableHyde" /></div>
-            <div class="switch-row"><span>Query 改写</span><el-switch v-model="chatForm.enableQueryRewrite" /></div>
-            <div class="switch-row"><span>流式输出</span><el-switch v-model="chatForm.stream" /></div>
-          </div>
         </div>
         <div class="setting-item" v-if="currentTemplate">
           <label class="setting-label">当前提示词</label>
@@ -44,7 +36,7 @@
             </svg>
           </div>
           <h2 class="welcome-title">Z-Brain 智能问答</h2>
-          <p class="welcome-desc">基于知识库的 RAG 智能问答，支持 HyDE 增强、多路召回与引用溯源</p>
+          <p class="welcome-desc">基于知识库的 RAG 智能问答，支持多路召回与引用溯源</p>
           <div class="welcome-suggestions">
             <div v-for="s in suggestions" :key="s" class="suggestion-chip" @click="sendMessage(s)">{{ s }}</div>
           </div>
@@ -154,11 +146,26 @@ import {
   Document, Reading
 } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github-dark.css'
 import { chatStream, rewriteQuery } from '@/api/chat'
 import { listKnowledgeBases } from '@/api/knowledgeBase'
 import { getPromptTemplateByKbId, getDefaultPromptTemplate } from '@/api/promptTemplate'
 
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: true })
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true,
+  breaks: true,
+  highlight(code, lang) {
+    const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+    try {
+      return `<pre class="hljs"><code>${hljs.highlight(code, { language, ignoreIllegals: true }).value}</code></pre>`
+    } catch {
+      return `<pre class="hljs"><code>${md.utils.escapeHtml(code)}</code></pre>`
+    }
+  }
+})
 
 const messageListRef = ref(null)
 const inputText = ref('')
@@ -172,8 +179,7 @@ const abortController = ref(null)
 const CITATION_RE = /\[?(doc_\d+)\]?/g
 
 const chatForm = reactive({
-  kbId: '', sessionId: '',
-  enableHyde: true, enableQueryRewrite: true, stream: true
+  kbId: '', sessionId: ''
 })
 
 const messages = ref([])
@@ -195,6 +201,7 @@ const suggestions = [
  * 渲染 AI 回答 HTML：
  * 1. markdown-it 转为 HTML
  * 2. 将 [doc_N] 替换为可点击的 <a> 徽章
+ * 3. 为代码块添加复制按钮
  */
 function renderAnswerHtml(text, citations) {
   if (!text) return ''
@@ -250,13 +257,10 @@ function onEnter() {
 function onSend() {
   const text = inputText.value.trim()
   if (!text) return
-  if (!chatForm.kbId) { ElMessage.warning('请先选择知识库'); return }
   sendMessage(text)
 }
 
 function sendMessage(text) {
-  if (!chatForm.kbId) { ElMessage.warning('请先选择知识库'); return }
-
   messages.value.push({ role: 'user', content: text })
   inputText.value = ''
 
@@ -365,11 +369,6 @@ onMounted(() => { loadKbList() })
   display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary);
   margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;
 }
-.switch-list {
-  display: flex; flex-direction: column; gap: 12px;
-  background: var(--bg-page); padding: 12px 14px; border-radius: var(--radius-sm);
-}
-.switch-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-regular); }
 .template-info {
   display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--primary);
   font-weight: 500; background: var(--primary-gradient-soft); padding: 10px 14px; border-radius: var(--radius-sm);
@@ -423,11 +422,15 @@ onMounted(() => { loadKbList() })
 .bubble-markdown :deep(li) { margin: 4px 0; }
 .bubble-markdown :deep(code) { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: 'Fira Code', 'Consolas', monospace; }
 .bubble-markdown :deep(pre) { background: #1e293b; color: #e2e8f0; padding: 14px 18px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }
-.bubble-markdown :deep(pre code) { background: none; padding: 0; color: inherit; }
+.bubble-markdown :deep(pre code) { background: none; padding: 0; color: inherit; font-size: 13px; }
+.bubble-markdown :deep(pre.hljs) { background: #0d1117; border: 1px solid #30363d; }
+.bubble-markdown :deep(.hljs) { background: #0d1117; }
 .bubble-markdown :deep(blockquote) { border-left: 3px solid var(--primary-lighter); padding-left: 14px; margin: 10px 0; color: var(--text-secondary); }
 .bubble-markdown :deep(table) { border-collapse: collapse; width: 100%; margin: 10px 0; }
 .bubble-markdown :deep(th), .bubble-markdown :deep(td) { border: 1px solid var(--border-base); padding: 8px 12px; text-align: left; font-size: 13px; }
 .bubble-markdown :deep(th) { background: #f8fafc; font-weight: 600; }
+.bubble-markdown :deep(strong) { font-weight: 700; }
+.bubble-markdown :deep(hr) { border: none; border-top: 1px solid var(--border-light); margin: 16px 0; }
 .bubble-markdown :deep(a) { color: var(--primary); text-decoration: none; }
 .bubble-markdown :deep(a:hover) { text-decoration: underline; }
 

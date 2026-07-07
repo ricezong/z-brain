@@ -14,6 +14,8 @@ import java.util.List;
  *   <li>HyDE 增强：生成假设性答案用于检索</li>
  * </ol>
  *
+ * <p>HyDE 与 Query 改写均为系统级优化，由配置文件统一控制，不对用户暴露开关。</p>
+ *
  * @author zbrain-team
  */
 public interface QueryPreprocessService {
@@ -44,16 +46,13 @@ public interface QueryPreprocessService {
     String generateHyDE(String query);
 
     /**
-     * 完整的查询预处理
+     * 完整的查询预处理（系统级控制 HyDE 与 Query 改写）
      *
-     * @param query              原始问题
-     * @param sessionId          会话 ID
-     * @param enableQueryRewrite 是否启用 Query 改写
-     * @param enableHyde         是否启用 HyDE
+     * @param query     原始问题
+     * @param sessionId 会话 ID
      * @return 预处理结果
      */
-    PreprocessResult preprocess(String query, String sessionId,
-                                boolean enableQueryRewrite, boolean enableHyde);
+    PreprocessResult preprocess(String query, String sessionId);
 
     /**
      * 预处理结果
@@ -65,7 +64,7 @@ public interface QueryPreprocessService {
             boolean isChitchat,
             /** 用于向量检索的文本（HyDE 答案或改写后的 Query） */
             String vectorQuery,
-            /** 用于全文/模糊检索的文本（改写后的 Query） */
+            /** 用于全文检索的文本（改写后的 Query） */
             String textQuery,
             List<ChatContextCache.ChatMessage> history
     ) {}

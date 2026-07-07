@@ -18,6 +18,7 @@ import cn.kong.zbrain.service.ChatService;
 import cn.kong.zbrain.service.HybridRetrievalService;
 import cn.kong.zbrain.service.PromptTemplateService;
 import cn.kong.zbrain.service.QueryPreprocessService;
+import cn.kong.zbrain.service.SysPromptService;
 import cn.kong.zbrain.util.CommonUtils;
 import cn.kong.zbrain.util.TokenUtils;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +40,7 @@ import java.util.regex.Pattern;
  * <p>完整链路：</p>
  * <ol>
  *   <li>查询预处理：意图识别、Query 改写、HyDE</li>
- *   <li>混合检索：向量/全文/模糊 + RRF 融合 + Rerank</li>
+ *   <li>混合检索：向量/全文 + RRF 融合 + Rerank</li>
  *   <li>Token 预算控制：提取 Top 5 子块对应父块，按预算截断</li>
  *   <li>问答生成：动态 Prompt 组装，强制引用标记</li>
  *   <li>引用溯源：解析 doc_x 标记，映射为前端可点击链接</li>
@@ -63,6 +64,7 @@ public class ChatServiceImpl implements ChatService {
     private final DocumentMapper documentMapper;
     private final ZBrainProperties properties;
     private final ObjectMapper objectMapper;
+    private final SysPromptService sysPromptService;
 
     /** 引用标记正则：[doc_1] 或 doc_1 */
     private static final Pattern CITATION_PATTERN = Pattern.compile("\\[?doc_(\\d+)\\]?");
@@ -74,11 +76,9 @@ public class ChatServiceImpl implements ChatService {
         // 1. 创建或获取会话
         ChatSession session = getOrCreateSession(request);
 
-        // 2. 查询预处理
+        // 2. 查询预处理（HyDE 与 Query 改写由系统配置统一控制）
         QueryPreprocessService.PreprocessResult preprocess = queryPreprocessService.preprocess(
-                request.getQuery(), session.getId(),
-                Boolean.TRUE.equals(request.getEnableQueryRewrite()),
-                Boolean.TRUE.equals(request.getEnableHyde()));
+                request.getQuery(), session.getId());
 
         // 3. 闲聊直接路由至 LLM
         if (preprocess.isChitchat()) {
@@ -90,12 +90,16 @@ public class ChatServiceImpl implements ChatService {
                 request.getKbId(), preprocess.vectorQuery(), preprocess.textQuery());
 
         if (retrievalResults.isEmpty()) {
+            String noResultMsg = sysPromptService.getContent("no_result");
+            if (noResultMsg == null) {
+                noResultMsg = "抱歉，知识库中未找到与您问题相关的内容，请尝试更换问法或联系管理员补充知识。";
+            }
             ChatResponse resp = new ChatResponse();
             resp.setSessionId(session.getId());
             resp.setQuery(request.getQuery());
             resp.setRewrittenQuery(preprocess.rewrittenQuery());
             resp.setHydeAnswer(preprocess.hydeAnswer());
-            resp.setAnswer("抱歉，知识库中未找到与您问题相关的内容，请尝试更换问法或联系管理员补充知识。");
+            resp.setAnswer(noResultMsg);
             resp.setCitations(new ArrayList<>());
             resp.setHitChunkIds(new ArrayList<>());
             resp.setCostTimeMs(System.currentTimeMillis() - startTime);
@@ -106,8 +110,8 @@ public class ChatServiceImpl implements ChatService {
         // 5. Token 预算控制 + 上下文组装
         ContextAssembly context = assembleContext(retrievalResults);
 
-        // 6. 动态 Prompt 组装
-        PromptTemplate template = promptTemplateService.getByKbId(request.getKbId());
+        // 6. 动态 Prompt 组装（kbId 为空时使用默认模板）
+        PromptTemplate template = getPromptTemplate(request.getKbId());
         String userPrompt = buildUserPrompt(template.getUserPrompt(), context.contextText(), request.getQuery());
 
         // 7. 调用 LLM 生成回答
@@ -144,19 +148,21 @@ public class ChatServiceImpl implements ChatService {
             // 1. 创建或获取会话
             ChatSession session = getOrCreateSession(request);
 
-            // 2. 查询预处理
+            // 2. 查询预处理（HyDE 与 Query 改写由系统配置统一控制）
             QueryPreprocessService.PreprocessResult preprocess = queryPreprocessService.preprocess(
-                    request.getQuery(), session.getId(),
-                    Boolean.TRUE.equals(request.getEnableQueryRewrite()),
-                    Boolean.TRUE.equals(request.getEnableHyde()));
+                    request.getQuery(), session.getId());
 
             // 3. 闲聊
             if (preprocess.isChitchat()) {
                 sendSseEvent(emitter, "session", session.getId());
                 sendSseEvent(emitter, "rewritten_query", preprocess.rewrittenQuery());
                 StringBuilder fullAnswer = new StringBuilder();
+                String chitchatPrompt = sysPromptService.getContent("chitchat");
+                if (chitchatPrompt == null) {
+                    chitchatPrompt = "你是智多星知识库助手，请友好地回答用户问题。回答使用 Markdown 格式输出。";
+                }
                 llmService.chatStream(
-                        "你是智多星知识库助手，请友好地回答用户问题。",
+                        chitchatPrompt,
                         request.getQuery(),
                         convertHistory(preprocess.history()),
                         chunk -> {
@@ -188,7 +194,11 @@ public class ChatServiceImpl implements ChatService {
                     .toList());
 
             if (retrievalResults.isEmpty()) {
-                sendSseEvent(emitter, "content", "抱歉，知识库中未找到与您问题相关的内容。");
+                String noResultMsg = sysPromptService.getContent("no_result");
+                if (noResultMsg == null) {
+                    noResultMsg = "抱歉，知识库中未找到与您问题相关的内容。";
+                }
+                sendSseEvent(emitter, "content", noResultMsg);
                 sendSseEvent(emitter, "done", "complete");
                 emitter.complete();
                 return;
@@ -197,8 +207,8 @@ public class ChatServiceImpl implements ChatService {
             // 6. Token 预算控制 + 上下文组装
             ContextAssembly context = assembleContext(retrievalResults);
 
-            // 7. 动态 Prompt 组装
-            PromptTemplate template = promptTemplateService.getByKbId(request.getKbId());
+            // 7. 动态 Prompt 组装（kbId 为空时使用默认模板）
+            PromptTemplate template = getPromptTemplate(request.getKbId());
             String userPrompt = buildUserPrompt(template.getUserPrompt(), context.contextText(), request.getQuery());
 
             // 8. 流式生成（发送完整引用信息，含文档名、内容片段与完整内容）
@@ -272,7 +282,7 @@ public class ChatServiceImpl implements ChatService {
         long startTime = System.currentTimeMillis();
         ChatSession session = getOrCreateSession(request);
         QueryPreprocessService.PreprocessResult preprocess = queryPreprocessService.preprocess(
-                request.getQuery(), session.getId(), false, false);
+                request.getQuery(), session.getId());
         return chitchatInternal(request, session, preprocess, startTime);
     }
 
@@ -282,8 +292,12 @@ public class ChatServiceImpl implements ChatService {
                                           QueryPreprocessService.PreprocessResult preprocess,
                                           long startTime) {
         List<LLMService.ChatMessage> history = convertHistory(preprocess.history());
+        String chitchatPrompt = sysPromptService.getContent("chitchat");
+        if (chitchatPrompt == null) {
+            chitchatPrompt = "你是智多星知识库助手，请友好地回答用户问题。回答使用 Markdown 格式输出。";
+        }
         String answer = llmService.chat(
-                "你是智多星知识库助手，请友好地回答用户问题。",
+                chitchatPrompt,
                 request.getQuery(),
                 history);
 
@@ -301,6 +315,16 @@ public class ChatServiceImpl implements ChatService {
         chatSessionMapper.incrementMessageCount(session.getId());
         saveLog(request, session, preprocess, response, new ArrayList<>());
         return response;
+    }
+
+    /**
+     * 获取提示词模板：kbId 不为空时优先知识库专属模板，否则使用默认模板
+     */
+    private PromptTemplate getPromptTemplate(Long kbId) {
+        if (kbId != null) {
+            return promptTemplateService.getByKbId(kbId);
+        }
+        return promptTemplateService.getDefault();
     }
 
     private ChatSession getOrCreateSession(ChatRequest request) {

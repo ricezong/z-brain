@@ -46,6 +46,11 @@ public class ZBrainProperties {
      */
     private LlamaIndex llamaIndex = new LlamaIndex();
 
+    /**
+     * 查询预处理配置（系统级控制，不对用户暴露）
+     */
+    private QueryPreprocess queryPreprocess = new QueryPreprocess();
+
     @Data
     public static class Document {
         private String uploadDir = "./data/uploads";
@@ -71,14 +76,10 @@ public class ZBrainProperties {
         private int vectorTopK = 20;
         /** 全文召回 Top K */
         private int fulltextTopK = 20;
-        /** 模糊召回 Top K */
-        private int fuzzyTopK = 10;
         /** RRF 融合参数 k */
         private int rrfK = 60;
         /** Rerank 后保留 Top N */
         private int rerankTopN = 5;
-        /** 模糊匹配相似度阈值 */
-        private double fuzzyThreshold = 0.3;
     }
 
     @Data
@@ -116,5 +117,13 @@ public class ZBrainProperties {
         private long pollIntervalMs = 3000L;
         /** 单个 job 最大等待时间（毫秒），默认 5 分钟 */
         private long jobTimeoutMs = 300000L;
+    }
+
+    @Data
+    public static class QueryPreprocess {
+        /** 是否启用 Query 改写（多轮对话指代消解 + 单轮关键词扩展） */
+        private boolean enableQueryRewrite = true;
+        /** 是否启用 HyDE 增强（生成假设性答案用于向量检索） */
+        private boolean enableHyde = true;
     }
 }

@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * 混合检索服务接口
  *
- * <p>组合向量/全文/模糊三路召回 + RRF 融合 + Rerank 精排。</p>
+ * <p>组合向量/全文两路并行召回 + RRF 融合 + Rerank 精排。</p>
  *
  * @author zbrain-team
  */
@@ -18,7 +18,7 @@ public interface HybridRetrievalService {
      *
      * @param kbId         知识库 ID
      * @param vectorQuery  向量检索文本（HyDE 答案或改写后的 Query）
-     * @param textQuery    全文/模糊检索文本（改写后的 Query）
+     * @param textQuery    全文检索文本（改写后的 Query）
      * @return 检索结果（含 Rerank 后的 Top N）
      */
     List<RetrievalResult> hybridRetrieve(Long kbId, String vectorQuery, String textQuery);
@@ -29,7 +29,6 @@ public interface HybridRetrievalService {
     record RetrievalInfo(
             int vectorCount,
             int fulltextCount,
-            int fuzzyCount,
             int fusedCount,
             int rerankCount,
             boolean rerankSuccess,

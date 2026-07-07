@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.kong.zbrain.mapper.SysLlmModelMapper">
+
+    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.SysLlmModel">
+        <id     column="id"          property="id"/>
+        <result column="name"        property="name"/>
+        <result column="model_type"  property="modelType"/>
+        <result column="provider"    property="provider"/>
+        <result column="model_name"  property="modelName"/>
+        <result column="api_key"     property="apiKey"/>
+        <result column="base_url"    property="baseUrl"/>
+        <result column="temperature" property="temperature"/>
+        <result column="max_tokens"  property="maxTokens"/>
+        <result column="is_default"  property="isDefault"/>
+        <result column="is_active"   property="isActive"/>
+        <result column="sort_order"  property="sortOrder"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, model_type, provider, model_name, api_key, base_url,
+        temperature, max_tokens, is_default, is_active, sort_order, create_time, update_time
+    </sql>
+
+    <insert id="insert" parameterType="cn.kong.zbrain.entity.SysLlmModel" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_llm_model
+            (name, model_type, provider, model_name, api_key, base_url,
+             temperature, max_tokens, is_default, is_active, sort_order)
+        VALUES
+            (#{name}, #{modelType}, #{provider}, #{modelName}, #{apiKey}, #{baseUrl},
+             COALESCE(#{temperature}, 0.3), #{maxTokens},
+             COALESCE(#{isDefault}, FALSE), COALESCE(#{isActive}, TRUE), COALESCE(#{sortOrder}, 0))
+    </insert>
+
+    <update id="update" parameterType="cn.kong.zbrain.entity.SysLlmModel">
+        UPDATE sys_llm_model
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="modelType != null">model_type = #{modelType},</if>
+            <if test="provider != null">provider = #{provider},</if>
+            <if test="modelName != null">model_name = #{modelName},</if>
+            <if test="apiKey != null">api_key = #{apiKey},</if>
+            <if test="baseUrl != null">base_url = #{baseUrl},</if>
+            <if test="temperature != null">temperature = #{temperature},</if>
+            <if test="maxTokens != null">max_tokens = #{maxTokens},</if>
+            <if test="isDefault != null">is_default = #{isDefault},</if>
+            <if test="isActive != null">is_active = #{isActive},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM sys_llm_model WHERE id = #{id}
+    </delete>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM sys_llm_model
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectDefaultByType" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM sys_llm_model
+        WHERE model_type = #{modelType}
+          AND is_default = TRUE
+          AND is_active = TRUE
+        ORDER BY sort_order ASC, id ASC
+        LIMIT 1
+    </select>
+
+    <select id="selectByType" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM sys_llm_model
+        WHERE model_type = #{modelType}
+          AND is_active = TRUE
+        ORDER BY is_default DESC, sort_order ASC, id ASC
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM sys_llm_model
+        ORDER BY model_type ASC, is_default DESC, sort_order ASC, id ASC
+    </select>
+
+    <update id="clearDefaultByType">
+        UPDATE sys_llm_model SET is_default = FALSE WHERE model_type = #{modelType}
+    </update>
+
+</mapper>

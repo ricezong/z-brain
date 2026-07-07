@@ -101,7 +101,8 @@ const menuItems = [
   { path: '/knowledge-bases', title: '知识库管理', icon: 'Collection' },
   { path: '/documents', title: '文档管理', icon: 'Document' },
   { path: '/chat', title: '智能问答', icon: 'ChatDotRound' },
-  { path: '/prompt-templates', title: '提示词模板', icon: 'EditPen' }
+  { path: '/prompt-templates', title: '提示词模板', icon: 'EditPen' },
+  { path: '/system-config', title: '系统配置', icon: 'Setting' }
 ]
 
 const currentTitle = computed(() => {

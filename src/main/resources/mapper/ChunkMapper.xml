@@ -154,40 +154,38 @@
     </select>
 
     <!-- ==================== 向量召回：基于 pgvector 余弦相似度 ==================== -->
+    <!-- kbId 为空时全局检索 -->
     <select id="vectorRetrieve" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM kb_chunk
-        WHERE kb_id = #{kbId}
-          AND chunk_type = 'child'
+        WHERE chunk_type = 'child'
           AND status = 'active'
           AND content_vector IS NOT NULL
+          <if test="kbId != null">
+            AND kb_id = #{kbId}
+          </if>
         ORDER BY content_vector &lt;=&gt; #{vectorStr}::vector
         LIMIT #{topK}
     </select>
 
     <!-- ==================== 全文召回：基于 zhparser 中文分词 ==================== -->
+    <!-- 使用 websearch_to_tsquery 替代 plainto_tsquery：
+         - 默认词间为 AND 逻辑，与 plainto_tsquery 一致
+         - 支持 OR 关键字（宽松匹配，提升召回率）
+         - 支持 "" 短语精确匹配
+         - 支持 - 排除词
+         - 对特殊字符更容错，不会因非法语法报错 -->
     <select id="fulltextRetrieve" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>,
-               ts_rank(tsv, plainto_tsquery('zh_cn', #{query})) AS rank
+               ts_rank(tsv, websearch_to_tsquery('zh_cn', #{query})) AS rank
         FROM kb_chunk
-        WHERE kb_id = #{kbId}
-          AND chunk_type = 'child'
+        WHERE chunk_type = 'child'
           AND status = 'active'
-          AND tsv @@ plainto_tsquery('zh_cn', #{query})
+          AND tsv @@ websearch_to_tsquery('zh_cn', #{query})
+          <if test="kbId != null">
+            AND kb_id = #{kbId}
+          </if>
         ORDER BY rank DESC
-        LIMIT #{topK}
-    </select>
-
-    <!-- ==================== 模糊召回：基于 pg_trgm 相似度 ==================== -->
-    <select id="fuzzyRetrieve" resultMap="BaseResultMap">
-        SELECT <include refid="Base_Column_List"/>,
-               similarity(content, #{query}) AS sim
-        FROM kb_chunk
-        WHERE kb_id = #{kbId}
-          AND chunk_type = 'child'
-          AND status = 'active'
-          AND similarity(content, #{query}) &gt; #{threshold}
-        ORDER BY sim DESC
         LIMIT #{topK}
     </select>
 

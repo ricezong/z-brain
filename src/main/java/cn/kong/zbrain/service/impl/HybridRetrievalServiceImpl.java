@@ -4,7 +4,6 @@ import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.dto.response.RetrievalResult;
 import cn.kong.zbrain.entity.Chunk;
 import cn.kong.zbrain.mapper.ChunkMapper;
-import cn.kong.zbrain.retrieval.FuzzyRetriever;
 import cn.kong.zbrain.retrieval.FullTextRetriever;
 import cn.kong.zbrain.retrieval.RRFFusion;
 import cn.kong.zbrain.retrieval.VectorRetriever;
@@ -12,10 +11,13 @@ import cn.kong.zbrain.service.HybridRetrievalService;
 import cn.kong.zbrain.service.RerankService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 /**
@@ -23,7 +25,7 @@ import java.util.stream.Collectors;
  *
  * <p>核心流程：</p>
  * <ol>
- *   <li>三路召回：向量（Top 20）+ 全文（Top 20）+ 模糊（Top 10）</li>
+ *   <li>两路并行召回：向量（Top 20）+ 全文（Top 20），通过 retrievalExecutor 线程池并行执行</li>
  *   <li>RRF 融合：倒数秩融合算法，k=60，取 Top 10</li>
  *   <li>Rerank 精排：百炼 qwen3-rerank，取 Top 5</li>
  *   <li>降级策略：Rerank 失败则使用 RRF 融合结果</li>
@@ -38,11 +40,13 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
 
     private final VectorRetriever vectorRetriever;
     private final FullTextRetriever fullTextRetriever;
-    private final FuzzyRetriever fuzzyRetriever;
     private final RRFFusion rrfFusion;
     private final RerankService rerankService;
     private final ChunkMapper chunkMapper;
     private final ZBrainProperties properties;
+
+    @Qualifier("retrievalExecutor")
+    private final Executor retrievalExecutor;
 
     /** ThreadLocal 存储最近一次检索过程信息，用于日志记录 */
     private final ThreadLocal<RetrievalInfo> lastInfo = new ThreadLocal<>();
@@ -52,22 +56,31 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
         long start = System.currentTimeMillis();
         ZBrainProperties.Retrieval config = properties.getRetrieval();
 
-        // 1. 三路召回
-        List<RetrievalResult> vectorResults = vectorRetriever.retrieve(kbId, vectorQuery, config.getVectorTopK());
-        List<RetrievalResult> fulltextResults = fullTextRetriever.retrieve(kbId, textQuery, config.getFulltextTopK());
-        List<RetrievalResult> fuzzyResults = fuzzyRetriever.retrieve(kbId, textQuery, config.getFuzzyTopK());
+        // 1. 两路并行召回（向量 + 全文）
+        CompletableFuture<List<RetrievalResult>> vectorFuture = CompletableFuture.supplyAsync(
+                () -> vectorRetriever.retrieve(kbId, vectorQuery, config.getVectorTopK()),
+                retrievalExecutor);
+        CompletableFuture<List<RetrievalResult>> fulltextFuture = CompletableFuture.supplyAsync(
+                () -> fullTextRetriever.retrieve(kbId, textQuery, config.getFulltextTopK()),
+                retrievalExecutor);
 
-        log.debug("三路召回完成: vector={}, fulltext={}, fuzzy={}",
-                vectorResults.size(), fulltextResults.size(), fuzzyResults.size());
+        // 等待两路召回全部完成
+        CompletableFuture.allOf(vectorFuture, fulltextFuture).join();
+
+        List<RetrievalResult> vectorResults = vectorFuture.join();
+        List<RetrievalResult> fulltextResults = fulltextFuture.join();
+
+        log.debug("两路并行召回完成: vector={}, fulltext={}",
+                vectorResults.size(), fulltextResults.size());
 
         // 2. RRF 融合
-        List<List<RetrievalResult>> allResults = List.of(vectorResults, fulltextResults, fuzzyResults);
+        List<List<RetrievalResult>> allResults = List.of(vectorResults, fulltextResults);
         List<RetrievalResult> fused = rrfFusion.fuse(allResults, config.getRrfK(), 10);
 
         if (fused.isEmpty()) {
             log.warn("RRF 融合后无结果: kbId={}", kbId);
             lastInfo.set(new RetrievalInfo(
-                    vectorResults.size(), fulltextResults.size(), fuzzyResults.size(),
+                    vectorResults.size(), fulltextResults.size(),
                     0, 0, false, new ArrayList<>()));
             return new ArrayList<>();
         }
@@ -83,7 +96,7 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
                 .map(RetrievalResult::getChunkId)
                 .collect(Collectors.toList());
         lastInfo.set(new RetrievalInfo(
-                vectorResults.size(), fulltextResults.size(), fuzzyResults.size(),
+                vectorResults.size(), fulltextResults.size(),
                 fused.size(), finalResults.size(), true, hitChunkIds));
 
         log.info("混合检索完成: kbId={}, 耗时={}ms, 最终命中={}",

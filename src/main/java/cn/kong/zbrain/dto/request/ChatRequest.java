@@ -1,7 +1,6 @@
 package cn.kong.zbrain.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -14,7 +13,7 @@ public class ChatRequest {
     /** 会话 ID，为空则新建会话 */
     private String sessionId;
 
-    @NotNull(message = "知识库 ID 不能为空")
+    /** 知识库 ID，为空则全局检索 */
     private Long kbId;
 
     @NotBlank(message = "问题不能为空")
@@ -22,13 +21,4 @@ public class ChatRequest {
 
     /** 用户 ID */
     private String userId;
-
-    /** 是否流式输出 */
-    private Boolean stream = true;
-
-    /** 是否启用 HyDE 增强 */
-    private Boolean enableHyde = true;
-
-    /** 是否启用 Query 改写 */
-    private Boolean enableQueryRewrite = true;
 }

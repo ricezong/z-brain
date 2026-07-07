@@ -3,7 +3,6 @@ package cn.kong.zbrain.controller;
 import cn.kong.zbrain.common.Result;
 import cn.kong.zbrain.dto.request.ChatRequest;
 import cn.kong.zbrain.dto.request.RewriteRequest;
-import cn.kong.zbrain.dto.response.ChatResponse;
 import cn.kong.zbrain.dto.response.RewriteResponse;
 import cn.kong.zbrain.service.ChatService;
 import cn.kong.zbrain.service.QueryPreprocessService;
@@ -36,14 +35,12 @@ public class ChatController {
     /*@Operation(summary = "同步问答")
     @PostMapping("/sync")
     public Result<ChatResponse> chat(@Valid @RequestBody ChatRequest request) {
-        request.setStream(false);
         return Result.success(chatService.chat(request));
     }*/
 
     @Operation(summary = "流式问答（SSE）")
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chatStream(@Valid @RequestBody ChatRequest request) {
-        request.setStream(true);
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
 
         emitter.onCompletion(() -> log.debug("SSE 连接完成"));
