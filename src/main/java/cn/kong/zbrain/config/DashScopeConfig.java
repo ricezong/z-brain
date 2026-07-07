@@ -5,10 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 百炼 SDK 配置
+ * 百炼 SDK 运维参数配置
  *
- * <p>用于调用阿里云百炼平台的文本向量模型 (text-embedding-v4)
- * 与重排序模型 (qwen3-rerank)。</p>
+ * <p>模型名称、API Key、Base URL 等模型选择参数已迁移到数据库 sys_llm_model 表，
+ * 此处仅保留运维级别的调用参数（批量大小、超时、重试）。</p>
  *
  * @author zbrain-team
  */
@@ -16,26 +16,6 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "zbrain.dashscope")
 public class DashScopeConfig {
-
-    /**
-     * 百炼 API 基础 URL
-     */
-    private String baseUrl;
-
-    /**
-     * 百炼 API Key
-     */
-    private String apiKey;
-
-    /**
-     * 文本向量模型名称
-     */
-    private String embeddingModel = "text-embedding-v4";
-
-    /**
-     * 重排序模型名称
-     */
-    private String rerankModel = "qwen3-rerank";
 
     /**
      * 批量向量化每批最大条数（百炼 text-embedding-v4 API 限制单次最多 10 条）

@@ -4,7 +4,9 @@ import com.alibaba.dashscope.embeddings.*;
 import cn.kong.zbrain.cache.EmbeddingCache;
 import cn.kong.zbrain.common.BusinessException;
 import cn.kong.zbrain.config.DashScopeConfig;
+import cn.kong.zbrain.entity.SysLlmModel;
 import cn.kong.zbrain.service.EmbeddingService;
+import cn.kong.zbrain.service.SysLlmModelService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,12 +17,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 向量化服务实现（基于百炼 SDK）
+ * 向量化服务实现（基于百炼 SDK + 数据库模型配置）
  *
  * <p>核心流程：</p>
  * <ol>
  *   <li>先检查 Redis Embedding 缓存，命中直接返回</li>
- *   <li>未命中的文本批量调用百炼 SDK text-embedding-v4</li>
+ *   <li>未命中的文本批量调用百炼 SDK（模型配置从 sys_llm_model 表读取）</li>
  *   <li>SDK 返回向量后写入 Redis 缓存</li>
  *   <li>按顺序返回向量列表</li>
  * </ol>
@@ -35,8 +37,43 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     /** 百炼 text-embedding API 单次请求最大文本条数（硬限制） */
     private static final int MAX_API_BATCH_SIZE = 10;
 
+    /** 百炼 SDK 向量化客户端（无状态，安全复用） */
+    private static final TextEmbedding TEXT_EMBEDDING = new TextEmbedding();
+
     private final DashScopeConfig dashScopeConfig;
     private final EmbeddingCache embeddingCache;
+    private final SysLlmModelService sysLlmModelService;
+
+    /** 缓存的 embedding 模型配置，配置变更后通过 clearCache() 失效 */
+    private volatile SysLlmModel cachedEmbeddingModel;
+
+    /**
+     * 获取默认 embedding 模型配置（带缓存）
+     */
+    private SysLlmModel getEmbeddingModel() {
+        if (cachedEmbeddingModel != null) {
+            return cachedEmbeddingModel;
+        }
+        synchronized (this) {
+            if (cachedEmbeddingModel != null) {
+                return cachedEmbeddingModel;
+            }
+            SysLlmModel model = sysLlmModelService.getDefaultByType("embedding");
+            if (model == null) {
+                throw new BusinessException("未找到默认的 embedding 模型配置，请在系统配置中添加");
+            }
+            log.info("初始化 Embedding 模型配置: name={}, model={}", model.getName(), model.getModelName());
+            cachedEmbeddingModel = model;
+            return model;
+        }
+    }
+
+    @Override
+    public void clearCache() {
+        synchronized (this) {
+            cachedEmbeddingModel = null;
+        }
+    }
 
     @Override
     public String embed(String text) {
@@ -127,14 +164,14 @@ public class EmbeddingServiceImpl implements EmbeddingService {
      * 单次调用百炼 SDK
      */
     private List<String> callOnce(List<String> texts) throws Exception {
+        SysLlmModel model = getEmbeddingModel();
         TextEmbeddingParam param = TextEmbeddingParam.builder()
-                .model(dashScopeConfig.getEmbeddingModel())
+                .model(model.getModelName())
                 .texts(texts)
-                .apiKey(dashScopeConfig.getApiKey())
+                .apiKey(model.getApiKey())
                 .build();
 
-        TextEmbedding textEmbedding = new TextEmbedding();
-        TextEmbeddingResult result = textEmbedding.call(param);
+        TextEmbeddingResult result = TEXT_EMBEDDING.call(param);
 
         List<String> vectors = new ArrayList<>();
         for (TextEmbeddingResultItem item : result.getOutput().getEmbeddings()) {

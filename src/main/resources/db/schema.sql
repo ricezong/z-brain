@@ -416,6 +416,36 @@ VALUES (
 )
 ON CONFLICT DO NOTHING;
 
+-- 百炼向量模型
+INSERT INTO sys_llm_model (name, model_type, provider, model_name, api_key, base_url, is_default, is_active, sort_order)
+VALUES (
+    '百炼向量模型',
+    'embedding',
+    'dashscope',
+    'text-embedding-v4',
+    'sk-ws-H.RYHDILP.oVEN.MEUCIQDvqfKy2fuPqF0WNGLFJ34-Gf1NRBKQKkslPej-CvpLHQIgQo7tH-VvR9DdoC3zYA3XnXrG5tMHB9sUnjCloROo-UA',
+    'https://dashscope.aliyuncs.com/api/v1',
+    TRUE,
+    TRUE,
+    0
+)
+ON CONFLICT DO NOTHING;
+
+-- 百炼重排模型
+INSERT INTO sys_llm_model (name, model_type, provider, model_name, api_key, base_url, is_default, is_active, sort_order)
+VALUES (
+    '百炼重排模型',
+    'rerank',
+    'dashscope',
+    'qwen3-rerank',
+    'sk-ws-H.RYHDILP.oVEN.MEUCIQDvqfKy2fuPqF0WNGLFJ34-Gf1NRBKQKkslPej-CvpLHQIgQo7tH-VvR9DdoC3zYA3XnXrG5tMHB9sUnjCloROo-UA',
+    'https://dashscope.aliyuncs.com/api/v1',
+    TRUE,
+    TRUE,
+    0
+)
+ON CONFLICT DO NOTHING;
+
 -- ==================== 维护任务：定时 ANALYZE ====================
 -- 业务低峰期执行 ANALYZE 更新统计信息，保障 ivfflat 召回率
 -- 建议通过 pg_cron 或外部调度执行：

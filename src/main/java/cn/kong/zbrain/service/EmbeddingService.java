@@ -5,11 +5,16 @@ import java.util.List;
 /**
  * 向量化服务接口
  *
- * <p>通过百炼 SDK 调用 text-embedding-v4 模型，将文本转换为向量。</p>
+ * <p>模型配置从数据库 sys_llm_model 表读取，支持动态切换。</p>
  *
  * @author zbrain-team
  */
 public interface EmbeddingService {
+
+    /**
+     * 清除缓存的模型配置（配置变更时调用）
+     */
+    void clearCache();
 
     /**
      * 单条文本向量化

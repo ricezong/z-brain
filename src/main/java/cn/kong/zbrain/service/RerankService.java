@@ -5,11 +5,16 @@ import java.util.List;
 /**
  * 重排序服务接口
  *
- * <p>通过百炼 SDK 调用 qwen3-rerank 模型，对召回结果进行精排。</p>
+ * <p>模型配置从数据库 sys_llm_model 表读取，支持动态切换。</p>
  *
  * @author zbrain-team
  */
 public interface RerankService {
+
+    /**
+     * 清除缓存的模型配置（配置变更时调用）
+     */
+    void clearCache();
 
     /**
      * 对候选文档进行重排序

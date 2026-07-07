@@ -53,19 +53,24 @@
         <div class="template-body">
           <div class="prompt-section">
             <div class="prompt-label">系统提示词</div>
-            <div class="prompt-content">{{ item.systemPrompt }}</div>
+            <div class="prompt-content" @click="openPreviewDialog(item, 'system')">{{ item.systemPrompt }}</div>
           </div>
           <div class="prompt-section">
             <div class="prompt-label">用户提示词</div>
-            <div class="prompt-content">{{ item.userPrompt }}</div>
+            <div class="prompt-content" @click="openPreviewDialog(item, 'user')">{{ item.userPrompt }}</div>
           </div>
         </div>
 
         <div class="template-footer">
           <span class="template-time">{{ formatDateTime(item.updateTime || item.createTime) }}</span>
-          <el-button link type="primary" size="small" @click="openEditDialog(item)">
-            <el-icon><Edit /></el-icon> 编辑
-          </el-button>
+          <div class="footer-actions">
+            <el-button link type="info" size="small" @click="openPreviewDialog(item, 'all')">
+              <el-icon><View /></el-icon> 预览
+            </el-button>
+            <el-button link type="primary" size="small" @click="openEditDialog(item)">
+              <el-icon><Edit /></el-icon> 编辑
+            </el-button>
+          </div>
         </div>
       </div>
 
@@ -74,6 +79,38 @@
         <p class="empty-text">暂无提示词模板</p>
       </div>
     </div>
+
+    <!-- 预览对话框 -->
+    <el-dialog
+      v-model="previewVisible"
+      :title="`预览：${previewItem?.name || ''}`"
+      width="760px"
+      destroy-on-close
+      class="preview-dialog"
+    >
+      <div v-if="previewItem" class="preview-body">
+        <div v-if="previewType === 'system' || previewType === 'all'" class="preview-section">
+          <div class="preview-label">
+            <el-icon><Setting /></el-icon>
+            系统提示词
+          </div>
+          <pre class="preview-text">{{ previewItem.systemPrompt }}</pre>
+        </div>
+        <div v-if="previewType === 'user' || previewType === 'all'" class="preview-section">
+          <div class="preview-label">
+            <el-icon><User /></el-icon>
+            用户提示词
+          </div>
+          <pre class="preview-text">{{ previewItem.userPrompt }}</pre>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="previewVisible = false">关闭</el-button>
+        <el-button type="primary" @click="openEditDialog(previewItem); previewVisible = false">
+          <el-icon><Edit /></el-icon> 编辑
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 创建/编辑对话框 -->
     <el-dialog
@@ -132,6 +169,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { View, Setting, User } from '@element-plus/icons-vue'
 import {
   listPromptTemplates,
   createPromptTemplate,
@@ -242,11 +280,22 @@ async function loadDefault() {
   try {
     const res = await getDefaultPromptTemplate()
     if (res.data) {
-      openEditDialog(res.data)
+      openPreviewDialog(res.data, 'all')
     } else {
       ElMessage.info('暂无默认模板')
     }
   } catch { /* ignore */ }
+}
+
+/* ---- 预览 ---- */
+const previewVisible = ref(false)
+const previewItem = ref(null)
+const previewType = ref('all')
+
+function openPreviewDialog(item, type = 'all') {
+  previewItem.value = item
+  previewType.value = type
+  previewVisible.value = true
 }
 
 onMounted(() => {
@@ -361,11 +410,16 @@ onMounted(() => {
   background: var(--bg-page);
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+  cursor: pointer;
+  transition: background 0.2s;
   font-family: 'Fira Code', 'Consolas', monospace;
+}
+.prompt-content:hover {
+  background: var(--bg-hover);
 }
 
 .template-footer {
@@ -375,6 +429,10 @@ onMounted(() => {
   padding: 12px 20px;
   border-top: 1px solid var(--border-light);
   background: #f8fafc;
+}
+.footer-actions {
+  display: flex;
+  gap: 4px;
 }
 .template-time {
   font-size: 12px;
@@ -415,5 +473,40 @@ onMounted(() => {
 .empty-text {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+/* ---- 预览对话框 ---- */
+.preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.preview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preview-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.preview-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-regular);
+  background: var(--bg-page);
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 0;
 }
 </style>

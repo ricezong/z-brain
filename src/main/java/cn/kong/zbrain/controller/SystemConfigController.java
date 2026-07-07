@@ -4,6 +4,8 @@ import cn.kong.zbrain.common.Result;
 import cn.kong.zbrain.entity.SysLlmModel;
 import cn.kong.zbrain.entity.SysPrompt;
 import cn.kong.zbrain.llm.LLMService;
+import cn.kong.zbrain.service.EmbeddingService;
+import cn.kong.zbrain.service.RerankService;
 import cn.kong.zbrain.service.SysLlmModelService;
 import cn.kong.zbrain.service.SysPromptService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,7 +18,8 @@ import java.util.List;
 /**
  * 系统配置 Controller
  *
- * <p>统一管理系统提示词和 LLM 模型配置。</p>
+ * <p>统一管理系统提示词和 LLM 模型配置。
+ * 模型配置变更后自动清除对应服务的缓存（chat / embedding / rerank）。</p>
  *
  * @author zbrain-team
  */
@@ -29,6 +32,8 @@ public class SystemConfigController {
     private final SysPromptService sysPromptService;
     private final SysLlmModelService sysLlmModelService;
     private final LLMService llmService;
+    private final EmbeddingService embeddingService;
+    private final RerankService rerankService;
 
     // ==================== 系统提示词 ====================
 
@@ -81,9 +86,9 @@ public class SystemConfigController {
     @PostMapping("/llm-models")
     public Result<Long> createLlmModel(@RequestBody SysLlmModel model) {
         Long id = sysLlmModelService.create(model);
-        // 如果新建模型设为默认，清除缓存使新配置生效
+        // 如果新建模型设为默认，清除对应类型的缓存使新配置生效
         if (Boolean.TRUE.equals(model.getIsDefault())) {
-            llmService.clearCache();
+            clearCacheByType(model.getModelType());
         }
         return Result.success(id);
     }
@@ -93,24 +98,45 @@ public class SystemConfigController {
     public Result<Void> updateLlmModel(@PathVariable Long id, @RequestBody SysLlmModel model) {
         model.setId(id);
         sysLlmModelService.update(model);
-        // 清除 LLM 服务缓存的 ChatModel
-        llmService.clearCache();
+        // 清除对应类型的缓存
+        clearCacheByType(model.getModelType());
         return Result.success();
     }
 
     @Operation(summary = "删除模型配置")
     @DeleteMapping("/llm-models/{id}")
     public Result<Void> deleteLlmModel(@PathVariable Long id) {
+        SysLlmModel existing = sysLlmModelService.getById(id);
         sysLlmModelService.delete(id);
-        llmService.clearCache();
+        // 清除对应类型的缓存
+        clearCacheByType(existing.getModelType());
         return Result.success();
     }
 
     @Operation(summary = "设置默认模型")
     @PutMapping("/llm-models/{id}/default")
     public Result<Void> setDefaultLlmModel(@PathVariable Long id) {
+        SysLlmModel model = sysLlmModelService.getById(id);
         sysLlmModelService.setDefault(id);
-        llmService.clearCache();
+        // 清除对应类型的缓存
+        clearCacheByType(model.getModelType());
         return Result.success();
+    }
+
+    /**
+     * 根据模型类型清除对应服务的缓存
+     *
+     * @param modelType chat / embedding / rerank
+     */
+    private void clearCacheByType(String modelType) {
+        if (modelType == null) {
+            return;
+        }
+        switch (modelType) {
+            case "chat" -> llmService.clearCache();
+            case "embedding" -> embeddingService.clearCache();
+            case "rerank" -> rerankService.clearCache();
+            default -> { /* 未知类型，忽略 */ }
+        }
     }
 }
