@@ -201,11 +201,42 @@ public class ChatServiceImpl implements ChatService {
             PromptTemplate template = promptTemplateService.getByKbId(request.getKbId());
             String userPrompt = buildUserPrompt(template.getUserPrompt(), context.contextText(), request.getQuery());
 
-            // 8. 流式生成
+            // 8. 流式生成（发送完整引用信息，含文档名、内容片段与完整内容）
             sendSseEvent(emitter, "citations", context.citationMap().entrySet().stream()
-                    .map(e -> Map.of("label", "doc_" + e.getKey(),
-                            "chunkId", e.getValue().getChunkId(),
-                            "docId", e.getValue().getDocId()))
+                    .map(e -> {
+                        RetrievalResult r = e.getValue();
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("label", "doc_" + e.getKey());
+                        m.put("chunkId", r.getChunkId());
+                        m.put("docId", r.getDocId());
+                        // 补充文档名
+                        Document doc = documentMapper.selectById(r.getDocId());
+                        if (doc != null) {
+                            m.put("docName", doc.getFileName());
+                        }
+                        // 内容片段：优先子块内容用于预览，截取前 300 字符
+                        String childContent = r.getContent();
+                        if (childContent != null && childContent.length() > 300) {
+                            childContent = childContent.substring(0, 300) + "...";
+                        }
+                        m.put("snippet", childContent != null ? childContent : "");
+                        // 完整内容：优先父块内容（即喂给 LLM 的上下文），其次子块内容
+                        String fullContent = r.getParentContent() != null
+                                ? r.getParentContent() : r.getContent();
+                        m.put("fullContent", fullContent != null ? fullContent : "");
+                        // 从 metadata 提取页码
+                        if (r.getMetadata() != null) {
+                            try {
+                                Map<?, ?> meta = objectMapper.readValue(r.getMetadata(), Map.class);
+                                Object page = meta.get("page");
+                                if (page instanceof Number n) {
+                                    m.put("page", n.intValue());
+                                }
+                            } catch (Exception ignored) {
+                            }
+                        }
+                        return m;
+                    })
                     .toList());
 
             StringBuilder fullAnswer = new StringBuilder();
