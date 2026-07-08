@@ -28,6 +28,30 @@ import request from './request'
 export function chatStream(data, { onMessage, onDone, onError }) {
   const controller = new AbortController()
 
+  // content 事件队列：逐帧分发，实现打字机效果
+  let contentQueue = []
+  let contentFlushing = false
+
+  function flushContent() {
+    if (contentQueue.length === 0) {
+      contentFlushing = false
+      return
+    }
+    contentFlushing = true
+    // 批量合并：将队列中所有 chunk 合并为一次更新，大幅减少渲染次数
+    const batch = contentQueue.join('')
+    contentQueue = []
+    onMessage({ type: 'content', data: batch })
+    requestAnimationFrame(flushContent)
+  }
+
+  function enqueueContent(chunk) {
+    contentQueue.push(chunk)
+    if (!contentFlushing) {
+      flushContent()
+    }
+  }
+
   fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -58,9 +82,14 @@ export function chatStream(data, { onMessage, onDone, onError }) {
             if (line.startsWith('event:')) {
               currentEvent = line.slice(6).trim()
             } else if (line.startsWith('data:')) {
-              // data 行可能有多行，逐行拼接
+              // SSE 规范：多个 data: 行之间用 \n 连接
               const dataLine = line.slice(5)
-              eventData += dataLine.startsWith(' ') ? dataLine.slice(1) : dataLine
+              const value = dataLine.startsWith(' ') ? dataLine.slice(1) : dataLine
+              if (eventData.length > 0) {
+                eventData += '\n' + value
+              } else {
+                eventData = value
+              }
             }
           }
 
@@ -75,9 +104,17 @@ export function chatStream(data, { onMessage, onDone, onError }) {
             parsed = eventData
           }
 
-          // done 事件单独处理
+          // done 事件：先 flush 剩余 content，再回调
           if (currentEvent === 'done') {
-            onDone && onDone(parsed)
+            // 等待队列中剩余 content 全部渲染完
+            const finish = () => {
+              if (contentQueue.length > 0) {
+                requestAnimationFrame(finish)
+              } else {
+                onDone && onDone(parsed)
+              }
+            }
+            finish()
             return
           }
 
@@ -87,13 +124,25 @@ export function chatStream(data, { onMessage, onDone, onError }) {
             return
           }
 
-          // 其他事件统一回调
-          onMessage && onMessage({ type: currentEvent, data: parsed })
+          // content 事件入队，逐帧分发
+          if (currentEvent === 'content') {
+            enqueueContent(parsed)
+          } else {
+            // 其他事件即时回调
+            onMessage && onMessage({ type: currentEvent, data: parsed })
+          }
         }
       }
 
       // 流结束但未收到 done 事件
-      onDone && onDone()
+      const finish = () => {
+        if (contentQueue.length > 0) {
+          requestAnimationFrame(finish)
+        } else {
+          onDone && onDone()
+        }
+      }
+      finish()
     })
     .catch((err) => {
       if (err.name !== 'AbortError') {

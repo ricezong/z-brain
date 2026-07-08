@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan="true" scanPeriod="60 seconds">
 
-    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="z-brain"/>
-    <springProperty scope="context" name="LOG_PATH" source="logging.file.name" defaultValue="./logs/z-brain.log"/>
-
+    <property name="LOG_PATH" value="./logs/z-brain.log"/>
     <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"/>
     <property name="LOG_FILE_PATTERN" value="%d{yyyy-MM-dd}.%i.log.gz"/>
 
@@ -57,7 +55,9 @@
     </root>
 
     <logger name="cn.kong.zbrain" level="DEBUG"/>
+    <!-- MyBatis Mapper SQL 日志，提升到 INFO 关闭控制台 SQL 输出 -->
+    <logger name="cn.kong.zbrain.mapper" level="INFO"/>
     <logger name="org.springframework.web" level="INFO"/>
-    <logger name="org.mybatis" level="DEBUG"/>
+    <logger name="org.mybatis" level="INFO"/>
     <logger name="com.alibaba.dashscope" level="INFO"/>
 </configuration>

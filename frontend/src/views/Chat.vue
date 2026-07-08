@@ -57,15 +57,32 @@
             <div class="message-bubble" :class="msg.role">
               <div v-if="msg.role === 'user'" class="bubble-text">{{ msg.content }}</div>
               <!-- AI 回答：渲染 markdown，[doc_N] 变为可点击徽章 -->
-              <div
-                v-else
-                class="bubble-markdown"
-                v-html="renderAnswerHtml(msg.content, msg.citations)"
-                @click="handleBubbleClick($event, msg.citations)"
-              ></div>
-              <div v-if="msg.loading" class="typing-indicator">
+              <template v-else>
+                <MarkdownView
+                  class="bubble-markdown"
+                  :content="msg.content"
+                  :citations="msg.citations"
+                  :is-streaming="msg.loading"
+                  @rendered="scrollToBottom"
+                  @click="handleBubbleClick($event, msg.citations)"
+                />
+                <span v-if="msg.loading && msg.content" class="streaming-cursor"></span>
+              </template>
+              <div v-if="msg.loading && !msg.content" class="typing-indicator">
                 <span></span><span></span><span></span>
               </div>
+            </div>
+
+            <!-- 消息操作栏 -->
+            <div v-if="msg.role === 'assistant' && !msg.loading && msg.content" class="message-actions">
+              <button class="action-btn" @click="copyMessage(msg)">
+                <el-icon><CopyDocument /></el-icon>
+                <span>复制</span>
+              </button>
+              <button class="action-btn" @click="regenerate(idx)">
+                <el-icon><RefreshRight /></el-icon>
+                <span>重新生成</span>
+              </button>
             </div>
 
             <!-- 元信息 -->
@@ -92,10 +109,13 @@
           />
           <div class="input-actions">
             <el-tooltip content="优化提示词" placement="top">
-              <el-button circle :icon="MagicStick" :loading="rewriting" @click="rewriteInput" :disabled="!inputText.trim()" />
+              <el-button circle :icon="MagicStick" :loading="rewriting" @click="rewriteInput" :disabled="!inputText.trim() || streaming" />
             </el-tooltip>
-            <el-button type="primary" :icon="Promotion" :loading="streaming" @click="onSend" :disabled="!inputText.trim()" round>
-              {{ streaming ? '生成中' : '发送' }}
+            <el-button v-if="streaming" type="danger" :icon="VideoPause" @click="stopGeneration" round>
+              停止
+            </el-button>
+            <el-button v-else type="primary" :icon="Promotion" @click="onSend" :disabled="!inputText.trim()" round>
+              发送
             </el-button>
           </div>
         </div>
@@ -143,29 +163,12 @@ import { ref, reactive, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   User, Refresh, Timer, MagicStick, Promotion, Delete, EditPen,
-  Document, Reading
+  Document, Reading, CopyDocument, RefreshRight, VideoPause
 } from '@element-plus/icons-vue'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css'
+import MarkdownView from '@/components/MarkdownView.vue'
 import { chatStream, rewriteQuery } from '@/api/chat'
 import { listKnowledgeBases } from '@/api/knowledgeBase'
 import { getPromptTemplateByKbId, getDefaultPromptTemplate } from '@/api/promptTemplate'
-
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: true,
-  breaks: true,
-  highlight(code, lang) {
-    const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
-    try {
-      return `<pre class="hljs"><code>${hljs.highlight(code, { language, ignoreIllegals: true }).value}</code></pre>`
-    } catch {
-      return `<pre class="hljs"><code>${md.utils.escapeHtml(code)}</code></pre>`
-    }
-  }
-})
 
 const messageListRef = ref(null)
 const inputText = ref('')
@@ -174,9 +177,6 @@ const rewriting = ref(false)
 const kbList = ref([])
 const currentTemplate = ref(null)
 const abortController = ref(null)
-
-/** 引用标记正则：匹配 [doc_1] 或 doc_1 */
-const CITATION_RE = /\[?(doc_\d+)\]?/g
 
 const chatForm = reactive({
   kbId: '', sessionId: ''
@@ -197,40 +197,11 @@ const suggestions = [
   '有哪些关键概念需要理解？'
 ]
 
-/**
- * 渲染 AI 回答 HTML：
- * 1. markdown-it 转为 HTML
- * 2. 将 [doc_N] 替换为可点击的 <a> 徽章
- * 3. 为代码块添加复制按钮
- */
-function renderAnswerHtml(text, citations) {
-  if (!text) return ''
-
-  // 缓存引用数据，供点击时查找
-  if (citations && citations.length > 0) {
-    citations.forEach(c => {
-      citationLookup[c.label] = c
-    })
-  }
-
-  let html = md.render(text)
-
-  if (citations && citations.length > 0) {
-    const labels = citations.map(c => c.label)
-    html = html.replace(CITATION_RE, (match, label) => {
-      if (labels.includes(label)) {
-        return `<a class="citation-ref" data-citation="${label}" href="javascript:void(0)">${label}</a>`
-      }
-      return match
-    })
-  }
-  return html
-}
-
-/** 处理气泡内点击（事件委托）— 点击引用徽章弹出详情 */
+/** 处理气泡内点击（事件委托）— 引用徽章弹出详情 / 代码块复制 */
 function handleBubbleClick(event) {
   const target = event.target
-  if (target.classList && target.classList.contains('citation-ref')) {
+  // 引用徽章点击
+  if (target.classList?.contains('citation-ref')) {
     const label = target.getAttribute('data-citation')
     if (label) {
       const cite = citationLookup[label]
@@ -238,6 +209,16 @@ function handleBubbleClick(event) {
         activeCitation.value = cite
         citationDialogVisible.value = true
       }
+    }
+  }
+  // 代码块复制按钮
+  if (target.classList?.contains('code-copy-btn')) {
+    const codeEl = target.closest('pre')?.querySelector('code')
+    if (codeEl) {
+      navigator.clipboard.writeText(codeEl.textContent).then(() => {
+        target.textContent = '已复制'
+        setTimeout(() => { target.textContent = '复制' }, 2000)
+      }).catch(() => {})
     }
   }
 }
@@ -260,22 +241,13 @@ function onSend() {
   sendMessage(text)
 }
 
-function sendMessage(text) {
-  messages.value.push({ role: 'user', content: text })
-  inputText.value = ''
-
-  const aiMsg = reactive({
-    role: 'assistant', content: '', loading: true,
-    citations: [], meta: null
-  })
-  messages.value.push(aiMsg)
-  scrollToBottom()
-
+/** 启动流式问答 */
+function startStreaming(query, aiMsg) {
   streaming.value = true
   const startTime = Date.now()
 
   abortController.value = chatStream(
-    { ...chatForm, query: text, sessionId: chatForm.sessionId || undefined },
+    { ...chatForm, query, sessionId: chatForm.sessionId || undefined },
     {
       onMessage: (msg) => {
         aiMsg.loading = false
@@ -286,7 +258,6 @@ function sendMessage(text) {
           aiMsg.content += data
         } else if (type === 'citations') {
           aiMsg.citations = data || []
-          // 预缓存引用数据
           if (data) {
             data.forEach(c => { citationLookup[c.label] = c })
           }
@@ -297,7 +268,6 @@ function sendMessage(text) {
         } else if (type === 'retrieval') {
           aiMsg.meta = { ...(aiMsg.meta || {}), retrieval: data }
         }
-        scrollToBottom()
       },
       onDone: (data) => {
         aiMsg.loading = false
@@ -312,6 +282,64 @@ function sendMessage(text) {
       }
     }
   )
+}
+
+function sendMessage(text) {
+  messages.value.push({ role: 'user', content: text })
+  inputText.value = ''
+
+  const aiMsg = reactive({
+    role: 'assistant', content: '', loading: true,
+    citations: [], meta: null
+  })
+  messages.value.push(aiMsg)
+  scrollToBottom()
+
+  startStreaming(text, aiMsg)
+}
+
+/** 停止生成 */
+function stopGeneration() {
+  if (abortController.value) {
+    abortController.value.abort()
+    abortController.value = null
+  }
+  streaming.value = false
+  const lastMsg = messages.value[messages.value.length - 1]
+  if (lastMsg?.role === 'assistant' && lastMsg.loading) {
+    lastMsg.loading = false
+  }
+}
+
+/** 复制消息 */
+function copyMessage(msg) {
+  navigator.clipboard.writeText(msg.content).then(() => {
+    ElMessage.success('已复制到剪贴板')
+  }).catch(() => {
+    ElMessage.error('复制失败')
+  })
+}
+
+/** 重新生成 */
+function regenerate(idx) {
+  if (streaming.value) return
+  let userQuery = ''
+  for (let i = idx - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'user') {
+      userQuery = messages.value[i].content
+      break
+    }
+  }
+  if (!userQuery) return
+
+  messages.value.splice(idx, 1)
+  const aiMsg = reactive({
+    role: 'assistant', content: '', loading: true,
+    citations: [], meta: null
+  })
+  messages.value.push(aiMsg)
+  scrollToBottom()
+  startStreaming(userQuery, aiMsg)
 }
 
 async function rewriteInput() {
@@ -425,6 +453,25 @@ onMounted(() => { loadKbList() })
 .bubble-markdown :deep(pre code) { background: none; padding: 0; color: inherit; font-size: 13px; }
 .bubble-markdown :deep(pre.hljs) { background: #0d1117; border: 1px solid #30363d; }
 .bubble-markdown :deep(.hljs) { background: #0d1117; }
+
+/* 代码块增强：语言标签 + 复制按钮 */
+.bubble-markdown :deep(.code-block-wrapper) { padding: 0; }
+.bubble-markdown :deep(.code-block-header) {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px; background: #161b22; border-bottom: 1px solid #30363d;
+  border-radius: 8px 8px 0 0;
+}
+.bubble-markdown :deep(.code-lang) {
+  font-size: 12px; color: #8b949e; font-family: 'Fira Code', 'Consolas', monospace;
+}
+.bubble-markdown :deep(.code-copy-btn) {
+  font-size: 12px; color: #8b949e; background: transparent; border: 1px solid #30363d;
+  border-radius: 4px; padding: 2px 10px; cursor: pointer; transition: all 0.2s;
+}
+.bubble-markdown :deep(.code-copy-btn:hover) {
+  color: #e2e8f0; border-color: #8b949e; background: rgba(255,255,255,0.05);
+}
+.bubble-markdown :deep(.code-block-wrapper code) { display: block; padding: 14px 18px; overflow-x: auto; }
 .bubble-markdown :deep(blockquote) { border-left: 3px solid var(--primary-lighter); padding-left: 14px; margin: 10px 0; color: var(--text-secondary); }
 .bubble-markdown :deep(table) { border-collapse: collapse; width: 100%; margin: 10px 0; }
 .bubble-markdown :deep(th), .bubble-markdown :deep(td) { border: 1px solid var(--border-base); padding: 8px 12px; text-align: left; font-size: 13px; }
@@ -472,6 +519,60 @@ onMounted(() => { loadKbList() })
 }
 .bubble-markdown :deep(.citation-ref:hover::before) {
   background: #fff;
+}
+
+/* ==================== 流式光标 ==================== */
+.streaming-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 2px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink-cursor 1s infinite step-end;
+}
+@keyframes blink-cursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* ==================== 消息操作栏 ==================== */
+.message-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.message-row:hover .message-actions { opacity: 1; }
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-placeholder);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.action-btn:hover {
+  color: var(--primary);
+  background: var(--primary-gradient-soft);
+}
+.action-btn .el-icon { font-size: 14px; }
+
+/* ==================== 任务列表 ==================== */
+.bubble-markdown :deep(.task-list-item) {
+  list-style: none;
+}
+.bubble-markdown :deep(.task-list-item input[type="checkbox"]) {
+  margin-right: 6px;
+  accent-color: var(--primary);
+  cursor: default;
 }
 
 /* ==================== 打字指示器 ==================== */
