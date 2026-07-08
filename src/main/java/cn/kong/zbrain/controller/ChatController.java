@@ -18,11 +18,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
  * 对话 Controller
@@ -41,6 +43,8 @@ public class ChatController {
     private final SysLlmModelService sysLlmModelService;
     private final ChatSessionMapper chatSessionMapper;
     private final ChatLogMapper chatLogMapper;
+    @Qualifier("sseStreamExecutor")
+    private final Executor sseStreamExecutor;
 
     private static final long SSE_TIMEOUT = 300_000L; // 5 分钟
 
@@ -85,7 +89,16 @@ public class ChatController {
         });
         emitter.onError(throwable -> log.error("SSE 连接异常", throwable));
 
-        intentRouter.routeStream(request, emitter);
+        // 异步执行流式问答：必须使 SseEmitter 立即返回，Spring MVC 才能启动异步上下文，
+        // 后续 emitter.send() 才能逐条实时推送到客户端，而非全部缓冲后一次性刷新。
+        sseStreamExecutor.execute(() -> {
+            try {
+                intentRouter.routeStream(request, emitter);
+            } catch (Exception e) {
+                log.error("流式问答异步执行异常", e);
+                emitter.completeWithError(e);
+            }
+        });
         return emitter;
     }
 

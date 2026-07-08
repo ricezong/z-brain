@@ -16,6 +16,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,8 +32,10 @@ import java.util.function.Consumer;
  * <p>统一封装大模型交互，支持同步与流式调用。
  * 模型配置从数据库 sys_llm_model 表读取，支持动态切换模型。</p>
  *
- * <p>多模型缓存：每个模型配置 ID 对应独立的 ChatModel/ChatClient 实例，
- * 通过 {@link #getChatModel(Long)} 按 ID 获取，modelId 为 null 时使用默认模型。</p>
+ * <p><b>模型注册中心</b>：系统启动时通过 {@link #preload()} 预加载所有活跃 chat 模型，
+ * 对话时命中缓存直接返回（不再每次查库）。模型配置新增/修改/删除后，由
+ * {@link #register}/{@link #reload}/{@link #evict}/{@link #reloadDefault} 进行细粒度热更新，
+ * 无需重启、无需全量清缓存。</p>
  *
  * @author zbrain-team
  */
@@ -42,48 +46,118 @@ public class LLMServiceImpl implements LLMService {
 
     private final SysLlmModelService sysLlmModelService;
 
-    /** 多模型缓存：modelId -> 缓存条目 */
+    /** 多模型缓存：模型配置 ID -> 缓存条目（按真实 ID 缓存，默认模型不再使用占位 key） */
     private final Map<Long, ModelCacheEntry> modelCache = new ConcurrentHashMap<>();
 
-    /** 默认模型的缓存 key */
-    private static final Long DEFAULT_KEY = -1L;
+    /** 缓存的默认 chat 模型 ID，默认模型变更后通过 {@link #reloadDefault()} 刷新 */
+    private volatile Long defaultChatModelId;
 
     /**
      * 模型缓存条目
      */
-    private record ModelCacheEntry(ChatModel chatModel, ChatClient chatClient, Long modelConfigId) {}
+    private record ModelCacheEntry(ChatModel chatModel, ChatClient chatClient) {}
+
+    // ==================== 模型注册中心（启动预加载 + 热更新） ====================
 
     /**
-     * 获取 ChatModel 实例
-     *
-     * @param modelId 模型配置 ID，为 null 时使用默认 chat 模型
+     * 系统启动后自动预加载所有活跃的 chat 模型，避免首次对话触发初始化耗时
      */
-    private ChatModel getChatModel(Long modelId) {
-        Long cacheKey = modelId != null ? modelId : DEFAULT_KEY;
-
-        ModelCacheEntry entry = modelCache.get(cacheKey);
-        if (entry != null) {
-            // 校验数据库中的配置 ID 是否变化
-            SysLlmModel current = resolveModelConfig(modelId);
-            if (current != null && current.getId().equals(entry.modelConfigId())) {
-                return entry.chatModel();
+    @EventListener(ApplicationReadyEvent.class)
+    @Override
+    public void preload() {
+        log.info("[模型预加载] 开始从数据库加载 chat 模型配置...");
+        try {
+            List<SysLlmModel> models = sysLlmModelService.listByType("chat");
+            int activeCount = 0;
+            for (SysLlmModel m : models) {
+                if (Boolean.TRUE.equals(m.getIsActive())) {
+                    cacheEntry(m);
+                    activeCount++;
+                }
             }
+            // 解析默认模型指针
+            SysLlmModel def = sysLlmModelService.getDefaultByType("chat");
+            defaultChatModelId = def != null ? def.getId() : null;
+            log.info("[模型预加载] 完成：共 {} 个 chat 模型，活跃已注册 {} 个，默认模型 id={}",
+                    models.size(), activeCount, defaultChatModelId);
+        } catch (Exception e) {
+            log.error("[模型预加载] 失败，将退化为首次调用时懒加载", e);
         }
+    }
 
-        // 需要创建/刷新缓存
-        SysLlmModel modelConfig = resolveModelConfig(modelId);
-        if (modelConfig == null) {
-            throw new BusinessException("未找到" + (modelId != null ? "ID=" + modelId + " 的" : "默认的")
-                    + " chat 模型配置，请在系统配置中添加");
+    @Override
+    public void register(SysLlmModel modelConfig) {
+        if (modelConfig == null || !"chat".equals(modelConfig.getModelType())) {
+            return;
         }
+        // 非活跃模型不进入缓存，并清理可能存在的旧缓存
+        if (!Boolean.TRUE.equals(modelConfig.getIsActive())) {
+            modelCache.remove(modelConfig.getId());
+            return;
+        }
+        cacheEntry(modelConfig);
+    }
 
+    @Override
+    public void evict(Long modelId) {
+        if (modelId == null) {
+            return;
+        }
+        modelCache.remove(modelId);
+        if (modelId.equals(defaultChatModelId)) {
+            defaultChatModelId = null;
+        }
+    }
+
+    @Override
+    public void reload(Long modelId) {
+        if (modelId == null) {
+            return;
+        }
+        try {
+            SysLlmModel cfg = sysLlmModelService.getById(modelId);
+            register(cfg);
+        } catch (Exception e) {
+            log.warn("重载模型失败，移除其缓存: id={}, err={}", modelId, e.getMessage());
+            evict(modelId);
+        }
+    }
+
+    @Override
+    public void reloadDefault() {
+        defaultChatModelId = null;
+        try {
+            SysLlmModel def = sysLlmModelService.getDefaultByType("chat");
+            if (def == null) {
+                log.warn("未找到默认 chat 模型配置，默认模型指针已清空");
+                return;
+            }
+            defaultChatModelId = def.getId();
+            // 默认模型若尚未注册，则补充注册
+            if (!modelCache.containsKey(def.getId())) {
+                cacheEntry(def);
+            }
+        } catch (Exception e) {
+            log.warn("重载默认模型失败: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    public void clearCache() {
         synchronized (this) {
-            entry = modelCache.get(cacheKey);
-            if (entry != null && modelConfig.getId().equals(entry.modelConfigId())) {
-                return entry.chatModel();
-            }
+            modelCache.clear();
+            defaultChatModelId = null;
+        }
+    }
 
-            log.info("初始化 ChatModel: id={}, name={}, model={}, baseUrl={}",
+    /**
+     * 根据模型配置构建 ChatModel/ChatClient 并写入缓存
+     *
+     * <p>构建过程加锁，避免同一模型被并发重复构建。</p>
+     */
+    private void cacheEntry(SysLlmModel modelConfig) {
+        synchronized (this) {
+            log.info("注册 ChatModel: id={}, name={}, model={}, baseUrl={}",
                     modelConfig.getId(), modelConfig.getName(),
                     modelConfig.getModelName(), modelConfig.getBaseUrl());
 
@@ -108,15 +182,66 @@ public class LLMServiceImpl implements LLMService {
                     .build();
 
             ChatClient chatClient = ChatClient.builder(chatModel).build();
-            entry = new ModelCacheEntry(chatModel, chatClient, modelConfig.getId());
-            modelCache.put(cacheKey, entry);
-
-            return chatModel;
+            modelCache.put(modelConfig.getId(), new ModelCacheEntry(chatModel, chatClient));
         }
+    }
+
+    // ==================== 模型获取（纯缓存读取，命中时不查库） ====================
+
+    /**
+     * 获取 ChatModel 实例
+     *
+     * <p>命中缓存时直接返回（不再每次查库校验），缓存新鲜度由
+     * {@link #register}/{@link #reload}/{@link #evict} 热更新保证。
+     * 未命中时按配置懒加载（兜底场景）。</p>
+     *
+     * @param modelId 模型配置 ID，为 null 时使用默认 chat 模型
+     */
+    private ChatModel getChatModel(Long modelId) {
+        Long effectiveId = (modelId != null) ? modelId : resolveDefaultId();
+        ModelCacheEntry entry = modelCache.get(effectiveId);
+        if (entry != null) {
+            return entry.chatModel();
+        }
+
+        // 缓存未命中（如未预加载成功、或被淘汰）：按配置懒加载兜底
+        SysLlmModel modelConfig = resolveModelConfig(modelId);
+        if (modelConfig == null) {
+            throw new BusinessException("未找到" + (modelId != null ? "ID=" + modelId + " 的" : "默认的")
+                    + " chat 模型配置，请在系统配置中添加");
+        }
+        if (!modelCache.containsKey(modelConfig.getId())) {
+            cacheEntry(modelConfig);
+        }
+        entry = modelCache.get(modelConfig.getId());
+        if (entry == null) {
+            throw new BusinessException("ChatModel 初始化失败: modelId=" + modelId);
+        }
+        return entry.chatModel();
+    }
+
+    /**
+     * 解析默认模型 ID（带缓存指针，避免每次查库）
+     */
+    private Long resolveDefaultId() {
+        if (defaultChatModelId != null) {
+            return defaultChatModelId;
+        }
+        SysLlmModel def = sysLlmModelService.getDefaultByType("chat");
+        if (def == null) {
+            throw new BusinessException("未找到默认的 chat 模型配置，请在系统配置中添加");
+        }
+        defaultChatModelId = def.getId();
+        if (!modelCache.containsKey(def.getId())) {
+            cacheEntry(def);
+        }
+        return defaultChatModelId;
     }
 
     /**
      * 解析模型配置：modelId 不为 null 时按 ID 查询，否则查默认 chat 模型
+     *
+     * <p>仅在缓存未命中的兜底路径使用。按 ID 查询失败时降级为默认模型。</p>
      */
     private SysLlmModel resolveModelConfig(Long modelId) {
         if (modelId != null) {
@@ -131,16 +256,13 @@ public class LLMServiceImpl implements LLMService {
     }
 
     private ChatClient getChatClient(Long modelId) {
-        Long cacheKey = modelId != null ? modelId : DEFAULT_KEY;
-        getChatModel(modelId); // 确保已初始化
-        return modelCache.get(cacheKey).chatClient();
-    }
-
-    @Override
-    public void clearCache() {
-        synchronized (this) {
-            modelCache.clear();
+        Long effectiveId = (modelId != null) ? modelId : resolveDefaultId();
+        ModelCacheEntry entry = modelCache.get(effectiveId);
+        if (entry == null) {
+            getChatModel(modelId); // 确保已初始化
+            entry = modelCache.get(effectiveId);
         }
+        return entry.chatClient();
     }
 
     // ==================== 同步调用 ====================

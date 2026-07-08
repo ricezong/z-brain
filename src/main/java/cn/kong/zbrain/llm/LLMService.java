@@ -1,5 +1,7 @@
 package cn.kong.zbrain.llm;
 
+import cn.kong.zbrain.entity.SysLlmModel;
+
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -90,9 +92,53 @@ public interface LLMService {
     String simpleChat(String prompt);
 
     /**
-     * 清除缓存的 ChatModel/ChatClient 实例
+     * 系统启动时预加载所有活跃的 chat 模型到缓存
      *
-     * <p>当数据库中的模型配置发生变更时调用，确保下次调用使用最新配置。</p>
+     * <p>避免首次对话触发模型初始化的耗时。由 {@code ApplicationReadyEvent} 自动触发。</p>
+     */
+    void preload();
+
+    /**
+     * 注册（或刷新）单个模型实例到缓存
+     *
+     * <p>用于模型新增/修改后的热更新。仅注册活跃的 chat 类型模型，
+     * 非活跃模型会被从缓存中移除。</p>
+     *
+     * @param modelConfig 模型配置
+     */
+    void register(SysLlmModel modelConfig);
+
+    /**
+     * 从缓存中移除指定模型实例
+     *
+     * <p>用于模型删除后的热更新。</p>
+     *
+     * @param modelId 模型配置 ID
+     */
+    void evict(Long modelId);
+
+    /**
+     * 从数据库重新加载指定模型并刷新缓存
+     *
+     * <p>用于模型修改后的热更新，等价于 evict + register。</p>
+     *
+     * @param modelId 模型配置 ID
+     */
+    void reload(Long modelId);
+
+    /**
+     * 重新解析默认 chat 模型
+     *
+     * <p>默认模型变更（设为默认 / 默认模型被删除 / 默认模型配置修改）后调用，
+     * 刷新内部缓存的默认模型指针。</p>
+     */
+    void reloadDefault();
+
+    /**
+     * 清除所有缓存的 ChatModel/ChatClient 实例
+     *
+     * <p>全量重置，一般用于调试或异常恢复。日常模型变更请使用
+     * {@link #register} / {@link #reload} / {@link #evict} 进行细粒度热更新。</p>
      */
     void clearCache();
 

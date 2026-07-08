@@ -19,7 +19,8 @@ import java.util.List;
  * 系统配置 Controller
  *
  * <p>统一管理系统提示词和 LLM 模型配置。
- * 模型配置变更后自动清除对应服务的缓存（chat / embedding / rerank）。</p>
+ * 模型配置变更后自动热更新对应服务缓存：chat 走细粒度 register/reload/evict，
+ * embedding / rerank 按类型清缓存（其缓存仅为单条默认配置）。</p>
  *
  * @author zbrain-team
  */
@@ -86,10 +87,8 @@ public class SystemConfigController {
     @PostMapping("/llm-models")
     public Result<Long> createLlmModel(@RequestBody SysLlmModel model) {
         Long id = sysLlmModelService.create(model);
-        // 如果新建模型设为默认，清除对应类型的缓存使新配置生效
-        if (Boolean.TRUE.equals(model.getIsDefault())) {
-            clearCacheByType(model.getModelType());
-        }
+        // 热更新：注册新建的 chat 模型；若设为默认则刷新默认模型指针
+        refreshAfterCreate(model, id);
         return Result.success(id);
     }
 
@@ -98,8 +97,8 @@ public class SystemConfigController {
     public Result<Void> updateLlmModel(@PathVariable Long id, @RequestBody SysLlmModel model) {
         model.setId(id);
         sysLlmModelService.update(model);
-        // 清除对应类型的缓存
-        clearCacheByType(model.getModelType());
+        // 热更新：重载该 chat 模型实例；默认/激活状态可能变化，刷新默认模型指针
+        refreshAfterUpdate(model);
         return Result.success();
     }
 
@@ -108,8 +107,8 @@ public class SystemConfigController {
     public Result<Void> deleteLlmModel(@PathVariable Long id) {
         SysLlmModel existing = sysLlmModelService.getById(id);
         sysLlmModelService.delete(id);
-        // 清除对应类型的缓存
-        clearCacheByType(existing.getModelType());
+        // 热更新：移除该 chat 模型缓存；若删除的是默认模型则刷新默认模型指针
+        refreshAfterDelete(existing);
         return Result.success();
     }
 
@@ -118,22 +117,81 @@ public class SystemConfigController {
     public Result<Void> setDefaultLlmModel(@PathVariable Long id) {
         SysLlmModel model = sysLlmModelService.getById(id);
         sysLlmModelService.setDefault(id);
-        // 清除对应类型的缓存
-        clearCacheByType(model.getModelType());
+        // 热更新：默认模型变更，刷新默认模型指针
+        refreshAfterDefaultChange(model.getModelType());
         return Result.success();
     }
 
     /**
-     * 根据模型类型清除对应服务的缓存
+     * 新建模型后的热更新
      *
-     * @param modelType chat / embedding / rerank
+     * <p>chat 类型走细粒度注册；embedding/rerank 仍按类型清缓存（其缓存仅为单条默认配置）。</p>
+     */
+    private void refreshAfterCreate(SysLlmModel model, Long id) {
+        String type = model.getModelType();
+        if ("chat".equals(type)) {
+            llmService.reload(id); // 从数据库读取并注册新模型
+            if (Boolean.TRUE.equals(model.getIsDefault())) {
+                llmService.reloadDefault();
+            }
+        } else {
+            clearCacheByType(type);
+        }
+    }
+
+    /**
+     * 更新模型后的热更新
+     *
+     * <p>chat 类型重载该模型实例并刷新默认指针；embedding/rerank 清缓存。</p>
+     */
+    private void refreshAfterUpdate(SysLlmModel model) {
+        String type = model.getModelType();
+        if ("chat".equals(type)) {
+            llmService.reload(model.getId());
+            llmService.reloadDefault();
+        } else {
+            clearCacheByType(type);
+        }
+    }
+
+    /**
+     * 删除模型后的热更新
+     *
+     * <p>chat 类型移除该模型缓存；若删除的是默认模型则刷新默认指针；embedding/rerank 清缓存。</p>
+     */
+    private void refreshAfterDelete(SysLlmModel existing) {
+        String type = existing.getModelType();
+        if ("chat".equals(type)) {
+            llmService.evict(existing.getId());
+            if (Boolean.TRUE.equals(existing.getIsDefault())) {
+                llmService.reloadDefault();
+            }
+        } else {
+            clearCacheByType(type);
+        }
+    }
+
+    /**
+     * 默认模型变更后的热更新
+     */
+    private void refreshAfterDefaultChange(String modelType) {
+        if ("chat".equals(modelType)) {
+            llmService.reloadDefault();
+        } else {
+            clearCacheByType(modelType);
+        }
+    }
+
+    /**
+     * 根据模型类型清除对应服务的缓存（仅用于 embedding / rerank）
+     *
+     * @param modelType embedding / rerank
      */
     private void clearCacheByType(String modelType) {
         if (modelType == null) {
             return;
         }
         switch (modelType) {
-            case "chat" -> llmService.clearCache();
             case "embedding" -> embeddingService.clearCache();
             case "rerank" -> rerankService.clearCache();
             default -> { /* 未知类型，忽略 */ }

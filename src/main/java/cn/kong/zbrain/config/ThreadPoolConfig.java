@@ -15,6 +15,7 @@ import java.util.concurrent.ThreadPoolExecutor;
  *   <li><b>解析池 (parseExecutor)</b>：处理 CPU/IO 密集型任务（文档解析、Tika 抽取）</li>
  *   <li><b>向量化池 (embeddingExecutor)</b>：处理强 IO 依赖任务（调用百炼 SDK）</li>
  *   <li><b>检索池 (retrievalExecutor)</b>：并行执行多路召回（向量 + 全文），隔离检索耗时</li>
+ *   <li><b>流式对话池 (sseStreamExecutor)</b>：异步执行 SseEmitter 流式问答，保证事件实时推送</li>
  * </ul>
  *
  * @author zbrain-team
@@ -79,6 +80,28 @@ public class ThreadPoolConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * SSE 流式对话线程池
+     * <p>用于异步执行流式问答（SseEmitter），使 Controller 方法立即返回，
+     * 保证 SSE 事件逐条实时推送而非缓冲后一次性刷新。</p>
+     * <p>任务为长耗时 IO 阻塞型（等待 LLM 逐 token 返回），
+     * 每个并发对话占用一个线程，线程数即最大并发对话数。</p>
+     */
+    @Bean("sseStreamExecutor")
+    public Executor sseStreamExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(8);
+        executor.setMaxPoolSize(32);
+        executor.setQueueCapacity(100);
+        executor.setKeepAliveSeconds(60);
+        executor.setThreadNamePrefix("zbrain-sse-stream-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(300);
         executor.initialize();
         return executor;
     }
