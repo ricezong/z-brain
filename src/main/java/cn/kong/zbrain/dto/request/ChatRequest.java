@@ -21,4 +21,13 @@ public class ChatRequest {
 
     /** 用户 ID */
     private String userId;
+
+    /** 对话模式：auto(默认) / chitchat / rag */
+    private String mode = "auto";
+
+    /** 指定模型 ID，为空则使用默认 chat 模型 */
+    private Long modelId;
+
+    /** 是否启用深度思考模式 */
+    private Boolean thinking = false;
 }

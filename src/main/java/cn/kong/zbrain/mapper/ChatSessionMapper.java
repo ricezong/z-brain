@@ -26,5 +26,7 @@ public interface ChatSessionMapper {
 
     long countByKbId(@Param("kbId") Long kbId);
 
+    List<ChatSession> selectByUserId(@Param("userId") String userId, @Param("offset") int offset, @Param("limit") int limit);
+
     int incrementMessageCount(@Param("id") String id);
 }

@@ -1,100 +1,64 @@
 <template>
   <div class="layout-wrapper">
-    <!-- 侧边栏 -->
-    <aside class="sidebar" :class="{ collapsed: isCollapsed }">
-      <div class="sidebar-logo">
-        <div class="logo-icon">
-          <svg viewBox="0 0 48 48" width="36" height="36">
-            <defs>
-              <linearGradient id="logoG" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#6366f1"/>
-                <stop offset="100%" stop-color="#8b5cf6"/>
-              </linearGradient>
-            </defs>
-            <rect width="48" height="48" rx="12" fill="url(#logoG)"/>
-            <path d="M16 14c0-1.1.9-2 2-2h8a8 8 0 0 1 0 16h-4v6a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V14z" fill="white" opacity="0.95"/>
-            <circle cx="24" cy="20" r="3" fill="#6366f1"/>
-          </svg>
-        </div>
-        <transition name="fade">
-          <span v-show="!isCollapsed" class="logo-text">Z-Brain</span>
-        </transition>
-      </div>
-
-      <nav class="sidebar-nav">
-        <router-link
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: isActive(item.path) }"
-        >
-          <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
-          <transition name="fade">
-            <span v-show="!isCollapsed" class="nav-text">{{ item.title }}</span>
-          </transition>
-        </router-link>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="footer-card" v-show="!isCollapsed">
-          <div class="footer-card-icon">
-            <el-icon><MagicStick /></el-icon>
+    <!-- 顶部导航栏 -->
+    <header class="navbar">
+      <div class="navbar-inner">
+        <!-- 左侧：Logo + 导航菜单 -->
+        <div class="navbar-left">
+          <div class="navbar-logo">
+            <svg viewBox="0 0 48 48" width="32" height="32">
+              <defs>
+                <linearGradient id="logoG" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#6366f1"/>
+                  <stop offset="100%" stop-color="#8b5cf6"/>
+                </linearGradient>
+              </defs>
+              <rect width="48" height="48" rx="12" fill="url(#logoG)"/>
+              <path d="M16 14c0-1.1.9-2 2-2h8a8 8 0 0 1 0 16h-4v6a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V14z" fill="white" opacity="0.95"/>
+              <circle cx="24" cy="20" r="3" fill="#6366f1"/>
+            </svg>
+            <span class="logo-text">Z-Brain</span>
           </div>
-          <div class="footer-card-text">
-            <div class="footer-card-title">智能 RAG 引擎</div>
-            <div class="footer-card-desc">HyDE · 多路召回 · Rerank</div>
-          </div>
-        </div>
-      </div>
-    </aside>
 
-    <!-- 主内容区 -->
-    <div class="main-area">
-      <!-- 顶部栏 -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <el-icon class="collapse-btn" @click="isCollapsed = !isCollapsed">
-            <Fold v-if="!isCollapsed" />
-            <Expand v-else />
-          </el-icon>
-          <div class="breadcrumb">
-            <span class="breadcrumb-main">{{ currentTitle }}</span>
-          </div>
+          <nav class="navbar-menu">
+            <router-link
+              v-for="item in menuItems"
+              :key="item.path"
+              :to="item.path"
+              class="menu-item"
+              :class="{ active: isActive(item.path) }"
+            >
+              <el-icon class="menu-icon"><component :is="item.icon" /></el-icon>
+              <span class="menu-text">{{ item.title }}</span>
+            </router-link>
+          </nav>
         </div>
-        <div class="topbar-right">
-          <el-tooltip content="智能问答" placement="bottom">
-            <el-icon class="topbar-icon" @click="$router.push('/chat')">
-              <ChatDotRound />
-            </el-icon>
-          </el-tooltip>
-          <el-tooltip content="GitHub" placement="bottom">
-            <el-icon class="topbar-icon"><Link /></el-icon>
-          </el-tooltip>
+
+        <!-- 右侧：用户头像 -->
+        <div class="navbar-right">
           <div class="avatar-wrapper">
             <div class="avatar">Z</div>
           </div>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <!-- 内容区 -->
-      <main class="content-area">
-        <router-view v-slot="{ Component }">
-          <transition name="slide-up" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </main>
-    </div>
+    <!-- 主内容区 -->
+    <main class="content-area">
+      <router-view v-slot="{ Component }">
+        <transition name="slide-up" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-const isCollapsed = ref(false)
 
 const menuItems = [
   { path: '/dashboard', title: '工作台', icon: 'Odometer' },
@@ -117,38 +81,43 @@ function isActive(path) {
 <style scoped>
 .layout-wrapper {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
 
-/* ==================== 侧边栏 ==================== */
-.sidebar {
-  width: var(--sidebar-width);
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-light);
-  display: flex;
-  flex-direction: column;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* ==================== 顶部导航栏 ==================== */
+.navbar {
+  height: var(--header-height);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-light);
   flex-shrink: 0;
   z-index: 100;
 }
-.sidebar.collapsed {
-  width: 72px;
-}
 
-.sidebar-logo {
-  height: var(--header-height);
+.navbar-inner {
+  height: 100%;
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  gap: 12px;
-  border-bottom: 1px solid var(--border-light);
+  justify-content: space-between;
+  padding: 0 24px;
 }
-.logo-icon {
-  flex-shrink: 0;
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+/* Logo */
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .logo-text {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   background: var(--primary-gradient);
   -webkit-background-clip: text;
@@ -157,19 +126,18 @@ function isActive(path) {
   white-space: nowrap;
 }
 
-.sidebar-nav {
-  flex: 1;
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-}
-
-.nav-item {
+/* 导航菜单 */
+.navbar-menu {
   display: flex;
   align-items: center;
-  padding: 10px 14px;
+  gap: 4px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
   color: var(--text-regular);
   text-decoration: none;
@@ -177,112 +145,37 @@ function isActive(path) {
   font-weight: 500;
   transition: all 0.2s ease;
   white-space: nowrap;
-  gap: 12px;
+  position: relative;
 }
-.nav-item:hover {
+.menu-item:hover {
   background: var(--bg-hover);
   color: var(--primary);
 }
-.nav-item.active {
-  background: var(--primary-gradient);
-  color: #fff;
-  box-shadow: var(--shadow-primary);
-}
-.nav-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-.nav-text {
-  overflow: hidden;
-}
-
-.sidebar-footer {
-  padding: 16px;
-}
-.footer-card {
+.menu-item.active {
+  color: var(--primary);
   background: var(--primary-gradient-soft);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
-.footer-card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+.menu-item.active::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
   background: var(--primary-gradient);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+}
+.menu-icon {
   font-size: 18px;
   flex-shrink: 0;
 }
-.footer-card-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.footer-card-desc {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
 
-/* ==================== 主内容区 ==================== */
-.main-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.topbar {
-  height: var(--header-height);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-light);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  flex-shrink: 0;
-  z-index: 50;
-}
-.topbar-left {
+/* 右侧 */
+.navbar-right {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-.collapse-btn {
-  font-size: 20px;
-  color: var(--text-regular);
-  cursor: pointer;
-  transition: color 0.2s;
-}
-.collapse-btn:hover {
-  color: var(--primary);
-}
-.breadcrumb-main {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-.topbar-icon {
-  font-size: 20px;
-  color: var(--text-regular);
-  cursor: pointer;
-  transition: color 0.2s;
-}
-.topbar-icon:hover {
-  color: var(--primary);
 }
 .avatar-wrapper {
   display: flex;
@@ -306,6 +199,7 @@ function isActive(path) {
   transform: scale(1.05);
 }
 
+/* ==================== 主内容区 ==================== */
 .content-area {
   flex: 1;
   overflow-y: auto;

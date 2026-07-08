@@ -161,7 +161,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   listChunksByDocId,
@@ -173,6 +173,7 @@ import {
 import { getDocumentById, submitReview } from '@/api/document'
 
 const route = useRoute()
+const router = useRouter()
 const docId = Number(route.params.docId)
 
 const loading = ref(false)
@@ -327,7 +328,7 @@ async function handleSubmitReview() {
     submitReviewDialog.value = false
     modifiedChunks.value = []
     deletedIds.value = []
-    loadData()
+    router.push('/documents')
   } finally {
     submitting.value = false
   }

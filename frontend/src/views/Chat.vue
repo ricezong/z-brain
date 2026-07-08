@@ -1,24 +1,28 @@
 <template>
   <div class="chat-page">
-    <!-- 左侧会话设置栏 -->
+    <!-- 左侧最近对话栏 -->
     <div class="chat-sidebar">
-      <div class="sidebar-section">
-        <h3 class="sidebar-title">问答设置</h3>
-        <div class="setting-item">
-          <label class="setting-label">知识库</label>
-          <el-select v-model="chatForm.kbId" placeholder="全部知识库" filterable clearable style="width: 100%" @change="onKbChange">
-            <el-option v-for="kb in kbList" :key="kb.id" :label="kb.name" :value="kb.id" />
-          </el-select>
-        </div>
-        <div class="setting-item" v-if="currentTemplate">
-          <label class="setting-label">当前提示词</label>
-          <div class="template-info"><el-icon><EditPen /></el-icon><span>{{ currentTemplate.name }}</span></div>
-        </div>
+      <div class="sidebar-header">
+        <h3 class="sidebar-title">最近对话</h3>
+        <button class="new-chat-btn" @click="newChat" title="新建对话">
+          <el-icon><Plus /></el-icon>
+        </button>
       </div>
-      <div class="sidebar-footer-section">
-        <el-button type="danger" plain round style="width: 100%" @click="clearChat">
-          <el-icon><Delete /></el-icon> 清空对话
-        </el-button>
+      <div class="session-list">
+        <div v-if="sessionList.length === 0" class="session-empty">暂无对话记录</div>
+        <div
+          v-for="s in sessionList" :key="s.id"
+          class="session-item"
+          :class="{ active: s.id === chatForm.sessionId }"
+          @click="loadSession(s)"
+        >
+          <el-icon class="session-icon"><ChatDotRound /></el-icon>
+          <div class="session-info">
+            <span class="session-title">{{ s.title }}</span>
+            <span class="session-meta">{{ s.messageCount }} 条消息</span>
+          </div>
+          <el-icon class="session-delete" @click.stop="removeSession(s)"><Close /></el-icon>
+        </div>
       </div>
     </div>
 
@@ -87,6 +91,12 @@
 
             <!-- 元信息 -->
             <div v-if="msg.meta" class="message-meta">
+              <span v-if="msg.meta.intent" class="meta-item meta-intent" :class="msg.meta.intent">
+                <el-icon><Aim /></el-icon> {{ intentLabel(msg.meta.intent) }}
+              </span>
+              <span v-if="msg.meta.modelName" class="meta-item">
+                <el-icon><Cpu /></el-icon> {{ msg.meta.modelName }}
+              </span>
               <span v-if="msg.meta.rewrittenQuery" class="meta-item">
                 <el-icon><Refresh /></el-icon> 改写: {{ msg.meta.rewrittenQuery }}
               </span>
@@ -101,22 +111,152 @@
       <!-- 输入区 -->
       <div class="input-area">
         <div class="input-wrapper">
+          <!-- 已引用的文件列表 -->
+          <div v-if="chatForm.attachments.length > 0" class="attachment-chips">
+            <div v-for="(file, i) in chatForm.attachments" :key="i" class="attachment-chip">
+              <el-icon><Document /></el-icon>
+              <span class="attachment-name">{{ file.name }}</span>
+              <span class="attachment-size">{{ formatFileSize(file.size) }}</span>
+              <el-icon class="attachment-remove" @click="removeAttachment(i)"><Close /></el-icon>
+            </div>
+          </div>
+
+          <!-- 输入框（上方） -->
           <el-input
-            v-model="inputText" type="textarea" :rows="2"
-            :autosize="{ minRows: 1, maxRows: 6 }"
+            v-model="inputText" type="textarea"
+            :autosize="{ minRows: 2, maxRows: 10 }"
             placeholder="输入你的问题，按 Enter 发送，Shift+Enter 换行..."
             resize="none" @keydown.enter.exact.prevent="onEnter" :disabled="streaming"
           />
-          <div class="input-actions">
-            <el-tooltip content="优化提示词" placement="top">
-              <el-button circle :icon="MagicStick" :loading="rewriting" @click="rewriteInput" :disabled="!inputText.trim() || streaming" />
-            </el-tooltip>
-            <el-button v-if="streaming" type="danger" :icon="VideoPause" @click="stopGeneration" round>
-              停止
-            </el-button>
-            <el-button v-else type="primary" :icon="Promotion" @click="onSend" :disabled="!inputText.trim()" round>
-              发送
-            </el-button>
+
+          <!-- 底部工具栏 -->
+          <div class="input-bottom-bar">
+            <!-- 左侧：工具按钮组 -->
+            <div class="bottom-bar-tools">
+              <!-- 引用文件 -->
+              <el-tooltip content="引用文件" placement="top">
+                <button class="tool-icon-btn" :class="{ active: chatForm.attachments.length > 0 }" @click="triggerFileUpload">
+                  <el-icon><Paperclip /></el-icon>
+                  <span v-if="chatForm.attachments.length > 0" class="icon-badge">{{ chatForm.attachments.length }}</span>
+                </button>
+              </el-tooltip>
+              <input ref="fileInputRef" type="file" multiple style="display:none" @change="onFileSelected" />
+
+              <!-- 工作模式 -->
+              <el-popover v-model:visible="modePopoverVisible" trigger="click" placement="top-start" :width="160" popper-class="chat-tool-popover">
+                <template #reference>
+                  <button class="tool-icon-btn" :class="{ active: chatForm.mode }" title="工作模式">
+                    <el-icon><component :is="currentWorkModeIcon" /></el-icon>
+                  </button>
+                </template>
+                <div class="tool-popover-list">
+                  <div
+                    v-for="mode in modeList" :key="mode.value"
+                    class="tool-popover-item mode-item"
+                    :class="{ active: chatForm.mode === mode.value }"
+                    @click="selectWorkMode(mode.value)"
+                  >
+                    <el-icon class="mode-item-icon"><component :is="modeIconMap[mode.value]" /></el-icon>
+                    <span class="tool-item-name">{{ mode.label }}</span>
+                    <el-icon v-if="chatForm.mode === mode.value" class="tool-item-check"><Select /></el-icon>
+                  </div>
+                </div>
+              </el-popover>
+
+              <!-- 知识库选择（仅 ask 模式） -->
+              <el-popover v-if="chatForm.mode === 'ask'" v-model:visible="kbPopoverVisible" trigger="click" placement="top-start" :width="220" popper-class="chat-tool-popover">
+                <template #reference>
+                  <button class="tool-icon-btn" :class="{ active: chatForm.kbId }" title="选择知识库">
+                    <el-icon><Notebook /></el-icon>
+                    <span v-if="currentKbName" class="model-name-label">{{ currentKbName }}</span>
+                    <span v-else class="model-name-label">全局</span>
+                  </button>
+                </template>
+                <div class="tool-popover-list">
+                  <div
+                    class="tool-popover-item"
+                    :class="{ active: !chatForm.kbId }"
+                    @click="selectKb('')"
+                  >
+                    <el-icon><Notebook /></el-icon>
+                    <span class="tool-item-name">全局检索</span>
+                    <el-icon v-if="!chatForm.kbId" class="tool-item-check"><Select /></el-icon>
+                  </div>
+                  <div
+                    v-for="kb in kbList" :key="kb.id"
+                    class="tool-popover-item"
+                    :class="{ active: kb.id === chatForm.kbId }"
+                    @click="selectKb(kb.id)"
+                  >
+                    <el-icon><Notebook /></el-icon>
+                    <span class="tool-item-name">{{ kb.name }}</span>
+                    <el-icon v-if="kb.id === chatForm.kbId" class="tool-item-check"><Select /></el-icon>
+                  </div>
+                </div>
+              </el-popover>
+
+              <!-- 模型选择 -->
+              <el-popover v-model:visible="modelPopoverVisible" trigger="click" placement="top-start" :width="200" popper-class="chat-tool-popover">
+                <template #reference>
+                  <button class="tool-icon-btn" :class="{ active: chatForm.modelId }" title="选择模型">
+                    <el-icon><Cpu /></el-icon>
+                    <span v-if="currentModel" class="model-name-label">{{ currentModel.modelName }}</span>
+                  </button>
+                </template>
+                <div class="tool-popover-list">
+                  <div
+                    v-for="m in modelList" :key="m.id"
+                    class="tool-popover-item"
+                    :class="{ active: m.id === chatForm.modelId }"
+                    @click="selectModel(m.id)"
+                  >
+                    <span class="tool-item-name">{{ m.modelName }}</span>
+                    <el-icon v-if="m.id === chatForm.modelId" class="tool-item-check"><Select /></el-icon>
+                  </div>
+                </div>
+              </el-popover>
+            </div>
+
+            <!-- 右侧：操作按钮 -->
+            <div class="bottom-bar-actions">
+              <!-- 思考模式 -->
+              <el-tooltip :content="chatForm.thinking ? '深度思考（已开启）' : '深度思考'" placement="top">
+                <button
+                  class="tool-icon-btn"
+                  :class="{ active: chatForm.thinking }"
+                  @click="chatForm.thinking = !chatForm.thinking"
+                >
+                  <svg class="thinking-icon" viewBox="0 0 24 24" width="17" height="17"
+                    :fill="chatForm.thinking ? 'currentColor' : 'none'"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  >
+                    <path d="M9 18h6" />
+                    <path d="M10 22h4" />
+                    <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
+                  </svg>
+                </button>
+              </el-tooltip>
+
+              <!-- 提示词增强 -->
+              <el-tooltip content="优化提示词" placement="top">
+                <button
+                  class="tool-icon-btn"
+                  :class="{ spinning: rewriting }"
+                  :disabled="!inputText.trim() || streaming"
+                  @click="rewriteInput"
+                >
+                  <el-icon><MagicStick /></el-icon>
+                </button>
+              </el-tooltip>
+
+              <!-- 发送 -->
+              <button v-if="streaming" class="send-btn stop" @click="stopGeneration">
+                <el-icon><VideoPause /></el-icon>
+              </button>
+              <button v-else class="send-btn" :disabled="!inputText.trim()" @click="onSend">
+                <el-icon><Promotion /></el-icon>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -159,14 +299,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, computed, nextTick, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  User, Refresh, Timer, MagicStick, Promotion, Delete, EditPen,
-  Document, Reading, CopyDocument, RefreshRight, VideoPause
+  User, Refresh, Timer, MagicStick, Promotion, EditPen,
+  Document, Reading, CopyDocument, RefreshRight, VideoPause, Aim,
+  Cpu, ChatDotRound, Notebook, Select,
+  Paperclip, ChatDotSquare, Operation, Close, Plus
 } from '@element-plus/icons-vue'
 import MarkdownView from '@/components/MarkdownView.vue'
-import { chatStream, rewriteQuery } from '@/api/chat'
+import { chatStream, rewriteQuery, getChatConfig, listSessions, deleteSession, getSessionMessages } from '@/api/chat'
 import { listKnowledgeBases } from '@/api/knowledgeBase'
 import { getPromptTemplateByKbId, getDefaultPromptTemplate } from '@/api/promptTemplate'
 
@@ -175,14 +317,100 @@ const inputText = ref('')
 const streaming = ref(false)
 const rewriting = ref(false)
 const kbList = ref([])
+const modelList = ref([])
+const modeList = ref([])
+const modePopoverVisible = ref(false)
+const modelPopoverVisible = ref(false)
+const kbPopoverVisible = ref(false)
+const sessionList = ref([])
+/** 模式图标映射 */
+const modeIconMap = { ask: ChatDotSquare, agent: Operation }
 const currentTemplate = ref(null)
 const abortController = ref(null)
 
 const chatForm = reactive({
-  kbId: '', sessionId: ''
+  kbId: '', sessionId: '', mode: 'ask', modelId: null,
+  thinking: false, attachments: []
 })
 
+const fileInputRef = ref(null)
+
 const messages = ref([])
+
+/** 当前选中的模型信息（用于工具栏模型按钮展示） */
+const currentModel = computed(() => {
+  if (!chatForm.modelId) return null
+  return modelList.value.find(m => m.id === chatForm.modelId) || null
+})
+
+/** 当前选中的知识库名称（用于工具栏展示） */
+const currentKbName = computed(() => {
+  if (!chatForm.kbId) return ''
+  const kb = kbList.value.find(k => k.id === chatForm.kbId)
+  return kb?.name || ''
+})
+
+/** 当前工作模式图标 */
+const currentWorkModeIcon = computed(() => {
+  return modeIconMap[chatForm.mode] || ChatDotSquare
+})
+
+/** 将前端工作模式映射为后端 mode */
+function getBackendMode() {
+  if (chatForm.mode === 'agent') return 'auto'
+  if (chatForm.kbId) return 'rag'
+  return 'auto'
+}
+
+/** 选择工作模式 */
+function selectWorkMode(mode) {
+  chatForm.mode = mode
+  if (mode === 'agent') {
+    chatForm.kbId = ''
+    currentTemplate.value = null
+    modePopoverVisible.value = false
+  }
+}
+
+/** 选择知识库 */
+function selectKb(kbId) {
+  chatForm.kbId = kbId
+  onKbChange(kbId)
+  kbPopoverVisible.value = false
+}
+
+/** 选择模型 */
+function selectModel(modelId) {
+  chatForm.modelId = modelId
+  onModelChange()
+  modelPopoverVisible.value = false
+}
+
+/** 触发文件上传 */
+function triggerFileUpload() {
+  fileInputRef.value?.click()
+}
+
+/** 文件选择回调 */
+function onFileSelected(e) {
+  const files = Array.from(e.target.files || [])
+  files.forEach(f => {
+    chatForm.attachments.push({ name: f.name, size: f.size, file: f })
+  })
+  e.target.value = ''
+}
+
+/** 移除附件 */
+function removeAttachment(idx) {
+  chatForm.attachments.splice(idx, 1)
+}
+
+/** 格式化文件大小 */
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
 
 /** 引用详情弹窗 */
 const citationDialogVisible = ref(false)
@@ -196,6 +424,7 @@ const suggestions = [
   '帮我总结核心知识点',
   '有哪些关键概念需要理解？'
 ]
+
 
 /** 处理气泡内点击（事件委托）— 引用徽章弹出详情 / 代码块复制 */
 function handleBubbleClick(event) {
@@ -246,8 +475,13 @@ function startStreaming(query, aiMsg) {
   streaming.value = true
   const startTime = Date.now()
 
+  // 记录当前选择的模型名称
+  if (currentModel.value) {
+    aiMsg.meta = { ...(aiMsg.meta || {}), modelName: currentModel.value.name }
+  }
+
   abortController.value = chatStream(
-    { ...chatForm, query, sessionId: chatForm.sessionId || undefined },
+    { ...chatForm, mode: getBackendMode(), query, sessionId: chatForm.sessionId || undefined },
     {
       onMessage: (msg) => {
         aiMsg.loading = false
@@ -263,6 +497,8 @@ function startStreaming(query, aiMsg) {
           }
         } else if (type === 'rewritten_query') {
           aiMsg.meta = { ...(aiMsg.meta || {}), rewrittenQuery: data }
+        } else if (type === 'intent') {
+          aiMsg.meta = { ...(aiMsg.meta || {}), intent: data }
         } else if (type === 'hyde') {
           aiMsg.meta = { ...(aiMsg.meta || {}), hydeAnswer: data }
         } else if (type === 'retrieval') {
@@ -274,6 +510,7 @@ function startStreaming(query, aiMsg) {
         const costTimeMs = typeof data === 'object' ? data?.costTimeMs : (Date.now() - startTime)
         aiMsg.meta = { ...(aiMsg.meta || {}), costTimeMs: costTimeMs || (Date.now() - startTime) }
         streaming.value = false
+        loadSessionList()
       },
       onError: (err) => {
         aiMsg.loading = false
@@ -347,8 +584,15 @@ async function rewriteInput() {
   rewriting.value = true
   try {
     const res = await rewriteQuery({ query: inputText.value, sessionId: chatForm.sessionId })
-    inputText.value = res.data.rewrittenQuery
-    ElMessage.success('提示词已优化')
+    const rewritten = res.data?.rewrittenQuery
+    if (rewritten && rewritten.trim() && rewritten.trim() !== inputText.value.trim()) {
+      inputText.value = rewritten.trim()
+      ElMessage.success('提示词已优化')
+    } else {
+      ElMessage.info('当前提示词已足够清晰，无需优化')
+    }
+  } catch (e) {
+    ElMessage.error('提示词优化失败：' + (e.message || '未知错误'))
   } finally { rewriting.value = false }
 }
 
@@ -366,10 +610,81 @@ async function onKbChange(kbId) {
   } catch { /* ignore */ }
 }
 
+/** 模型切换 */
+function onModelChange() {
+  // 下次发送消息时自动携带新 modelId
+}
+
+/** 意图标签文案 */
+function intentLabel(intent) {
+  const labels = { chitchat: '闲聊', rag: '知识库问答', search: '联网搜索', tool: '工具调用' }
+  return labels[intent] || intent
+}
+
 function clearChat() {
   messages.value = []
   chatForm.sessionId = ''
   Object.keys(citationLookup).forEach(k => delete citationLookup[k])
+}
+
+/** 新建对话 */
+function newChat() {
+  clearChat()
+}
+
+/** 加载会话列表 */
+async function loadSessionList() {
+  try {
+    const res = await listSessions({ pageNum: 1, pageSize: 50 })
+    sessionList.value = res.data || []
+  } catch { /* ignore */ }
+}
+
+/** 点击会话项，加载历史消息 */
+async function loadSession(session) {
+  if (streaming.value) return
+  clearChat()
+  chatForm.sessionId = session.id
+  // 恢复该会话的知识库选择
+  chatForm.kbId = session.kbId || ''
+  if (session.kbId) {
+    onKbChange(session.kbId)
+  } else {
+    currentTemplate.value = null
+  }
+  try {
+    const res = await getSessionMessages(session.id)
+    const logs = res.data || []
+    logs.forEach(log => {
+      messages.value.push({ role: 'user', content: log.query })
+      messages.value.push({
+        role: 'assistant', content: log.answer || '', loading: false,
+        citations: [], meta: log.rewrittenQuery ? { rewrittenQuery: log.rewrittenQuery } : null
+      })
+    })
+    scrollToBottom()
+  } catch { /* ignore */ }
+}
+
+/** 删除会话 */
+async function removeSession(session) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除对话「${session.title}」吗？`,
+      '删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch {
+    return // 用户取消
+  }
+  try {
+    await deleteSession(session.id)
+    sessionList.value = sessionList.value.filter(s => s.id !== session.id)
+    if (chatForm.sessionId === session.id) {
+      clearChat()
+    }
+    ElMessage.success('已删除')
+  } catch { /* ignore */ }
 }
 
 async function loadKbList() {
@@ -379,29 +694,72 @@ async function loadKbList() {
   } catch { /* ignore */ }
 }
 
-onMounted(() => { loadKbList() })
+async function loadChatConfig() {
+  try {
+    const res = await getChatConfig()
+    const cfg = res.data || {}
+    modeList.value = cfg.modes || []
+    modelList.value = cfg.models || []
+    if (cfg.defaultModelId) {
+      chatForm.modelId = cfg.defaultModelId
+    }
+  } catch { /* ignore */ }
+}
+
+onMounted(() => {
+  loadKbList()
+  loadChatConfig()
+  loadSessionList()
+})
 </script>
 
 <style scoped>
 .chat-page { display: flex; height: 100%; overflow: hidden; }
 
-/* ==================== 侧边设置栏 ==================== */
+/* ==================== 侧边会话栏 ==================== */
 .chat-sidebar {
   width: 280px; background: var(--bg-card); border-right: 1px solid var(--border-light);
-  display: flex; flex-direction: column; padding: 20px; flex-shrink: 0;
+  display: flex; flex-direction: column; flex-shrink: 0;
 }
-.sidebar-section { flex: 1; }
-.sidebar-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 20px; }
-.setting-item { margin-bottom: 24px; }
-.setting-label {
-  display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary);
-  margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;
+.sidebar-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px 12px;
 }
-.template-info {
-  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--primary);
-  font-weight: 500; background: var(--primary-gradient-soft); padding: 10px 14px; border-radius: var(--radius-sm);
+.sidebar-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 0; }
+.new-chat-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px;
+  color: var(--text-secondary); background: transparent;
+  border: none; cursor: pointer; transition: all 0.2s;
 }
-.sidebar-footer-section { padding-top: 16px; border-top: 1px solid var(--border-light); }
+.new-chat-btn:hover { color: var(--primary); background: var(--primary-gradient-soft); }
+.session-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
+.session-empty {
+  text-align: center; font-size: 13px; color: var(--text-placeholder);
+  padding: 40px 0;
+}
+.session-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.15s; margin-bottom: 2px;
+}
+.session-item:hover { background: var(--bg-hover); }
+.session-item.active { background: var(--primary-gradient-soft); }
+.session-icon { font-size: 16px; color: var(--text-secondary); flex-shrink: 0; }
+.session-item.active .session-icon { color: var(--primary); }
+.session-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.session-title {
+  font-size: 13px; font-weight: 500; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.session-item.active .session-title { color: var(--primary); }
+.session-meta { font-size: 11px; color: var(--text-placeholder); }
+.session-delete {
+  font-size: 14px; color: var(--text-placeholder); flex-shrink: 0;
+  opacity: 0; transition: all 0.15s; cursor: pointer;
+}
+.session-item:hover .session-delete { opacity: 1; }
+.session-delete:hover { color: var(--danger); }
 
 /* ==================== 对话主区 ==================== */
 .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -591,20 +949,123 @@ onMounted(() => { loadKbList() })
 /* ==================== 元信息 ==================== */
 .message-meta { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
 .meta-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-placeholder); }
+.meta-intent { font-weight: 600; }
+.meta-intent.chitchat { color: #f59e0b; }
+.meta-intent.rag { color: var(--primary); }
 
 /* ==================== 输入区 ==================== */
-.input-area { padding: 16px 32px 24px; background: var(--bg-page); border-top: 1px solid var(--border-light); }
+.input-area {
+  padding: 12px 32px 20px; background: var(--bg-page);
+  border-top: 1px solid var(--border-light);
+}
 .input-wrapper {
   max-width: 900px; margin: 0 auto; background: var(--bg-card);
   border: 1px solid var(--border-base); border-radius: var(--radius-lg);
-  padding: 12px 16px; box-shadow: var(--shadow-md); transition: border-color 0.2s;
+  padding: 14px 16px 10px; box-shadow: var(--shadow-md);
+  transition: border-color 0.2s;
 }
 .input-wrapper:focus-within { border-color: var(--primary-light); }
 .input-wrapper :deep(.el-textarea__inner) {
-  border: none; box-shadow: none; background: transparent; padding: 0; font-size: 14px; line-height: 1.6;
+  border: none; box-shadow: none; background: transparent;
+  padding: 0; font-size: 14px; line-height: 1.6;
 }
 .input-wrapper :deep(.el-textarea__inner:focus) { box-shadow: none; }
-.input-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 8px; }
+
+/* ==================== 附件标签 ==================== */
+.attachment-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 8px;
+}
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px; border-radius: 6px;
+  background: var(--bg-hover); font-size: 12px;
+  color: var(--text-regular); max-width: 220px;
+}
+.attachment-chip .el-icon { font-size: 13px; color: var(--text-secondary); flex-shrink: 0; }
+.attachment-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.attachment-size { font-size: 11px; color: var(--text-placeholder); flex-shrink: 0; }
+.attachment-remove {
+  cursor: pointer; color: var(--text-placeholder);
+  transition: color 0.15s; flex-shrink: 0;
+}
+.attachment-remove:hover { color: var(--danger); }
+
+/* ==================== 底部工具栏 ==================== */
+.input-bottom-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-top: 8px;
+}
+.bottom-bar-tools {
+  display: flex; align-items: center; gap: 2px;
+}
+.bottom-bar-actions {
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+}
+
+/* --- 通用图标按钮 --- */
+.tool-icon-btn {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; height: 32px; padding: 0 6px; border-radius: 8px;
+  color: var(--text-secondary); background: transparent;
+  border: none; cursor: pointer; transition: all 0.2s;
+}
+.tool-icon-btn:hover:not(:disabled) {
+  color: var(--text-primary); background: var(--bg-hover);
+}
+.tool-icon-btn.active {
+  color: var(--primary); background: var(--primary-gradient-soft);
+}
+.tool-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tool-icon-btn .el-icon { font-size: 17px; }
+.model-name-label {
+  font-size: 12px; font-weight: 500; margin-left: 2px;
+  white-space: nowrap;
+}
+.tool-icon-btn.spinning .el-icon { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 图标上的小徽章（附件数量） */
+.icon-badge {
+  position: absolute; top: -2px; right: -2px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; font-size: 10px; font-weight: 600;
+  color: #fff; background: var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+
+/* 图标上的小圆点（已配置知识库提示） */
+.icon-dot {
+  position: absolute; bottom: 2px; right: 2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-card);
+}
+
+/* --- 发送按钮（圆形渐变） --- */
+.send-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 50%;
+  color: #fff; background: var(--primary-gradient);
+  border: none; cursor: pointer; transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  margin-left: 4px;
+}
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+}
+.send-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+.send-btn .el-icon { font-size: 16px; }
+.send-btn.stop {
+  background: var(--danger);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+.send-btn.stop:hover { box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); }
 
 /* ==================== 引用详情弹窗 ==================== */
 .citation-detail {
@@ -648,4 +1109,28 @@ onMounted(() => { loadKbList() })
   max-height: 360px; overflow-y: auto;
   white-space: pre-wrap; word-break: break-word;
 }
+</style>
+
+<style>
+/* Popover 内容样式（全局，因为 popover 被 teleport 到 body） */
+.chat-tool-popover.el-popover.el-popper {
+  padding: 6px !important;
+}
+.tool-popover-list {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.tool-popover-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  transition: background 0.15s;
+}
+.tool-popover-item:hover { background: #f1f5f9; }
+.tool-popover-item.active { background: var(--primary-gradient-soft); }
+.tool-item-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.tool-popover-item.active .tool-item-name { color: var(--primary); }
+.tool-item-check { color: var(--primary); font-size: 16px; margin-left: auto; }
+
+/* 工作模式弹窗 */
+.mode-item-icon { font-size: 17px; color: var(--text-secondary); flex-shrink: 0; }
+.mode-item.active .mode-item-icon { color: var(--primary); }
 </style>

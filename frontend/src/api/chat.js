@@ -7,6 +7,9 @@ import request from './request'
  *   event:session
  *   data:session-id-string
  *
+ *   event:intent
+ *   data:chitchat 或 rag
+ *
  *   event:rewritten_query
  *   data:rewritten-query-string
  *
@@ -21,6 +24,7 @@ import request from './request'
  *
  * 回调 onMessage 收到的是统一格式的对象：
  *   { type: 'session', data: 'session-id-string' }
+ *   { type: 'intent', data: 'chitchat' }
  *   { type: 'content', data: 'text chunk' }
  *   { type: 'citations', data: [{...}] }
  *   { type: 'done', data: { costTimeMs: 1234 } }
@@ -156,4 +160,24 @@ export function chatStream(data, { onMessage, onDone, onError }) {
 /** 优化输入，增强提示词 */
 export function rewriteQuery(data) {
   return request.post('/chat/rewrite', data)
+}
+
+/** 获取对话页配置（工作模式 + 模型列表） */
+export function getChatConfig() {
+  return request.get('/chat/config')
+}
+
+/** 获取最近会话列表 */
+export function listSessions(params) {
+  return request.get('/chat/sessions', { params })
+}
+
+/** 删除会话 */
+export function deleteSession(sessionId) {
+  return request.delete(`/chat/sessions/${sessionId}`)
+}
+
+/** 获取会话历史消息 */
+export function getSessionMessages(sessionId) {
+  return request.get(`/chat/sessions/${sessionId}/messages`)
 }

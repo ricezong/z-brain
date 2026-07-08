@@ -54,6 +54,14 @@
         SELECT COUNT(1) FROM kb_chat_session WHERE kb_id = #{kbId}
     </select>
 
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_chat_session
+        WHERE user_id = #{userId}
+        ORDER BY update_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
     <update id="incrementMessageCount">
         UPDATE kb_chat_session SET message_count = message_count + 1 WHERE id = #{id}
     </update>

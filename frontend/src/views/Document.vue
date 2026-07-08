@@ -88,8 +88,9 @@
               <el-icon><Files /></el-icon> 分块审核
             </el-button>
             <el-button
-              v-if="row.status === 'pending_review' || row.status === 'success'"
+              v-if="row.status === 'pending_review' || row.status === 'embedding' || row.status === 'success'"
               link type="success" size="small"
+              :disabled="row.status !== 'pending_review'"
               @click="handleEmbed(row)"
             >
               <el-icon><Promotion /></el-icon> 向量化

@@ -383,6 +383,38 @@ INSERT INTO sys_prompt (prompt_key, name, description, content) VALUES
 如果您有其他问题，随时可以继续提问。')
 ON CONFLICT (prompt_key) DO NOTHING;
 
+-- 意图识别提示词（新增）
+INSERT INTO sys_prompt (prompt_key, name, description, content) VALUES
+('intent_classify',
+ '意图识别提示词',
+ '判断用户输入是闲聊还是知识库问答，返回结构化 JSON',
+ '# 角色
+你是一个意图识别引擎，负责判断用户输入的意图类型。
+
+# 意图类型
+- chitchat：闲聊，包括问候、感谢、告别、身份询问、日常聊天、情绪表达等
+- rag：知识库问答，需要检索知识库才能回答的专业问题
+
+# 判断规则
+1. 问候、感谢、告别、身份询问 → chitchat
+2. 知识性问题、技术问题、事实查询 → rag
+3. 承上启下的追问（如"那第二个呢""继续"）→ 根据对话历史判断
+4. 如果有知识库且问题与知识领域相关 → 倾向 rag
+5. 模糊两可时，倾向于 rag（宁可检索浪费，不可漏答知识问题）
+
+# 对话历史
+{history}
+
+# 是否关联知识库
+{has_kb}
+
+# 用户输入
+{query}
+
+# 输出格式（严格 JSON，不要输出其他内容）
+{"intent": "chitchat 或 rag", "confidence": 0.0-1.0, "reason": "简短理由"}')
+ON CONFLICT (prompt_key) DO NOTHING;
+
 -- ==================== 初始化默认提示词模板 ====================
 INSERT INTO kb_prompt_template (kb_id, name, system_prompt, user_prompt, is_default)
 VALUES (NULL, '默认通用模板',

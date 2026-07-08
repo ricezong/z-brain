@@ -7,26 +7,18 @@ import java.util.List;
 /**
  * 查询预处理服务接口
  *
- * <p>包含三大能力：</p>
+ * <p>包含两大能力：</p>
  * <ol>
- *   <li>意图识别路由：判断闲聊或知识问答</li>
  *   <li>多轮对话 Query 改写：将指代不清的 Query 改写为独立完整 Query</li>
  *   <li>HyDE 增强：生成假设性答案用于检索</li>
  * </ol>
  *
- * <p>HyDE 与 Query 改写均为系统级优化，由配置文件统一控制，不对用户暴露开关。</p>
+ * <p>意图识别已迁移至 {@link cn.kong.zbrain.service.IntentService}。
+ * HyDE 与 Query 改写均为系统级优化，由配置文件统一控制，不对用户暴露开关。</p>
  *
  * @author zbrain-team
  */
 public interface QueryPreprocessService {
-
-    /**
-     * 意图识别
-     *
-     * @param query 用户问题
-     * @return true 表示闲聊，false 表示知识问答
-     */
-    boolean isChitchat(String query);
 
     /**
      * 多轮对话 Query 改写
@@ -36,6 +28,18 @@ public interface QueryPreprocessService {
      * @return 改写后的独立完整 Query
      */
     String rewriteQuery(String query, String sessionId);
+
+    /**
+     * 用户主动触发的提示词优化（API 接口专用）
+     *
+     * <p>无论是否有对话历史，都使用 LLM 进行完整改写，
+     * 使查询更清晰、更完整、更适合检索。</p>
+     *
+     * @param query     当前问题
+     * @param sessionId 会话 ID（可选）
+     * @return 优化后的 Query
+     */
+    String rewriteQueryForApi(String query, String sessionId);
 
     /**
      * HyDE 假设性答案生成

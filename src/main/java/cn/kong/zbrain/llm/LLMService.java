@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 public interface LLMService {
 
     /**
-     * 同步调用
+     * 同步调用（使用默认模型）
      *
      * @param systemPrompt 系统提示词
      * @param userPrompt   用户提示词
@@ -23,7 +23,30 @@ public interface LLMService {
     String chat(String systemPrompt, String userPrompt, List<ChatMessage> history);
 
     /**
-     * 流式调用（SSE）
+     * 同步调用（指定模型）
+     *
+     * @param modelId      模型配置 ID，为 null 时使用默认模型
+     * @param systemPrompt 系统提示词
+     * @param userPrompt   用户提示词
+     * @param history      历史对话（可选）
+     * @return 生成的回答
+     */
+    String chat(Long modelId, String systemPrompt, String userPrompt, List<ChatMessage> history);
+
+    /**
+     * 同步调用（指定模型 + 深度思考）
+     *
+     * @param modelId      模型配置 ID，为 null 时使用默认模型
+     * @param systemPrompt 系统提示词
+     * @param userPrompt   用户提示词
+     * @param history      历史对话（可选）
+     * @param thinking     是否启用深度思考模式
+     * @return 生成的回答
+     */
+    String chat(Long modelId, String systemPrompt, String userPrompt, List<ChatMessage> history, boolean thinking);
+
+    /**
+     * 流式调用（SSE，使用默认模型）
      *
      * @param systemPrompt 系统提示词
      * @param userPrompt   用户提示词
@@ -32,6 +55,31 @@ public interface LLMService {
      */
     void chatStream(String systemPrompt, String userPrompt, List<ChatMessage> history,
                     Consumer<String> onChunk);
+
+    /**
+     * 流式调用（SSE，指定模型）
+     *
+     * @param modelId      模型配置 ID，为 null 时使用默认模型
+     * @param systemPrompt 系统提示词
+     * @param userPrompt   用户提示词
+     * @param history      历史对话
+     * @param onChunk      每个文本块的回调
+     */
+    void chatStream(Long modelId, String systemPrompt, String userPrompt, List<ChatMessage> history,
+                    Consumer<String> onChunk);
+
+    /**
+     * 流式调用（SSE，指定模型 + 深度思考）
+     *
+     * @param modelId      模型配置 ID，为 null 时使用默认模型
+     * @param systemPrompt 系统提示词
+     * @param userPrompt   用户提示词
+     * @param history      历史对话
+     * @param thinking     是否启用深度思考模式
+     * @param onChunk      每个文本块的回调
+     */
+    void chatStream(Long modelId, String systemPrompt, String userPrompt, List<ChatMessage> history,
+                    boolean thinking, Consumer<String> onChunk);
 
     /**
      * 简单调用（用于 Query 改写、HyDE、意图识别等轻量任务）

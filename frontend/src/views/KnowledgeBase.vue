@@ -36,7 +36,7 @@
 
     <!-- 知识库卡片网格 -->
     <div v-loading="loading" class="card-grid">
-      <div class="kb-card" v-for="item in list" :key="item.id">
+      <div class="kb-card" v-for="item in list" :key="item.id" @click="goToDocs(item)">
         <div class="kb-card-header">
           <div class="kb-icon">
             <el-icon><Collection /></el-icon>
@@ -46,11 +46,10 @@
             <span class="kb-category" v-if="item.category">{{ item.category }}</span>
           </div>
           <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, item)">
-            <el-icon class="kb-more"><MoreFilled /></el-icon>
+            <el-icon class="kb-more" @click.stop><MoreFilled /></el-icon>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="edit">编辑</el-dropdown-item>
-                <el-dropdown-item command="docs">查看文档</el-dropdown-item>
                 <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -267,9 +266,12 @@ async function handleDelete(item) {
   loadCategories()
 }
 
+function goToDocs(item) {
+  router.push({ path: '/documents', query: { kbId: item.id } })
+}
+
 function handleCommand(cmd, item) {
   if (cmd === 'edit') openEditDialog(item)
-  else if (cmd === 'docs') router.push({ path: '/documents', query: { kbId: item.id } })
   else if (cmd === 'delete') handleDelete(item)
 }
 
