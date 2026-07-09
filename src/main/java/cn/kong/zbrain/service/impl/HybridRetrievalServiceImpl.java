@@ -2,6 +2,7 @@ package cn.kong.zbrain.service.impl;
 
 import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.dto.response.RetrievalResult;
+import cn.kong.zbrain.dto.response.ThinkingStep;
 import cn.kong.zbrain.entity.Chunk;
 import cn.kong.zbrain.mapper.ChunkMapper;
 import cn.kong.zbrain.retrieval.FullTextRetriever;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -53,6 +55,12 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
 
     @Override
     public List<RetrievalResult> hybridRetrieve(Long kbId, String vectorQuery, String textQuery) {
+        return hybridRetrieve(kbId, vectorQuery, textQuery, null);
+    }
+
+    @Override
+    public List<RetrievalResult> hybridRetrieve(Long kbId, String vectorQuery, String textQuery,
+                                                Consumer<ThinkingStep> onThinking) {
         long start = System.currentTimeMillis();
         ZBrainProperties.Retrieval config = properties.getRetrieval();
 
@@ -73,20 +81,28 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
         log.debug("两路并行召回完成: vector={}, fulltext={}",
                 vectorResults.size(), fulltextResults.size());
 
+        emitThinking(onThinking, "vector_retrieval", "向量检索", "命中 " + vectorResults.size() + " 条");
+        emitThinking(onThinking, "fulltext_retrieval", "全文检索", "命中 " + fulltextResults.size() + " 条");
+
         // 2. RRF 融合
         List<List<RetrievalResult>> allResults = List.of(vectorResults, fulltextResults);
         List<RetrievalResult> fused = rrfFusion.fuse(allResults, config.getRrfK(), 10);
+
+        emitThinking(onThinking, "rrf_fusion", "RRF 融合",
+                "输入 " + allResults.size() + " 路 · 输出 " + fused.size() + " 条");
 
         if (fused.isEmpty()) {
             log.warn("RRF 融合后无结果: kbId={}", kbId);
             lastInfo.set(new RetrievalInfo(
                     vectorResults.size(), fulltextResults.size(),
                     0, 0, false, new ArrayList<>()));
+            emitThinking(onThinking, "retrieval_complete", "检索完成",
+                    "耗时 " + (System.currentTimeMillis() - start) + "ms · 最终命中 0 条");
             return new ArrayList<>();
         }
 
         // 3. Rerank 精排
-        List<RetrievalResult> finalResults = rerank(fused, textQuery, config.getRerankTopN());
+        List<RetrievalResult> finalResults = rerank(fused, textQuery, config.getRerankTopN(), onThinking);
 
         // 4. 填充父块内容（用于上下文组装）
         fillParentContent(finalResults);
@@ -99,15 +115,18 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
                 vectorResults.size(), fulltextResults.size(),
                 fused.size(), finalResults.size(), true, hitChunkIds));
 
-        log.info("混合检索完成: kbId={}, 耗时={}ms, 最终命中={}",
-                kbId, System.currentTimeMillis() - start, finalResults.size());
+        long elapsed = System.currentTimeMillis() - start;
+        log.info("混合检索完成: kbId={}, 耗时={}ms, 最终命中={}", kbId, elapsed, finalResults.size());
+        emitThinking(onThinking, "retrieval_complete", "检索完成",
+                "耗时 " + elapsed + "ms · 最终命中 " + finalResults.size() + " 条");
         return finalResults;
     }
 
     /**
      * Rerank 精排（含降级策略）
      */
-    private List<RetrievalResult> rerank(List<RetrievalResult> fused, String query, int topN) {
+    private List<RetrievalResult> rerank(List<RetrievalResult> fused, String query, int topN,
+                                         Consumer<ThinkingStep> onThinking) {
         try {
             List<String> documents = fused.stream()
                     .map(RetrievalResult::getContent)
@@ -126,12 +145,26 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
                 result.add(item);
             }
             log.info("Rerank 完成: 返回 {} 个结果", result.size());
+            emitThinking(onThinking, "rerank", "重排序",
+                    "候选 " + documents.size() + " → 返回 " + result.size() + " 条");
             return result;
         } catch (Exception e) {
             // 降级策略：Rerank 失败则使用 RRF 融合后的排序结果
             log.warn("Rerank 调用失败，降级使用 RRF 融合结果: {}", e.getMessage());
             int limit = Math.min(topN, fused.size());
+            emitThinking(onThinking, "rerank", "重排序",
+                    "降级 RRF · 候选 " + fused.size() + " → 返回 " + limit + " 条");
             return new ArrayList<>(fused.subList(0, limit));
+        }
+    }
+
+    /**
+     * 发出思考步骤（如果回调存在）
+     */
+    private static void emitThinking(Consumer<ThinkingStep> onThinking,
+                                     String step, String title, String detail) {
+        if (onThinking != null) {
+            onThinking.accept(new ThinkingStep(step, title, detail, System.currentTimeMillis()));
         }
     }
 

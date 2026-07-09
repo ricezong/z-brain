@@ -17,8 +17,6 @@ public class ChatResponse {
     private String query;
     /** 改写后的问题 */
     private String rewrittenQuery;
-    /** HyDE 假设答案 */
-    private String hydeAnswer;
     /** 最终回答 */
     private String answer;
     /** 引用列表 */
@@ -26,9 +24,13 @@ public class ChatResponse {
     /** 命中分块 ID */
     private List<Long> hitChunkIds;
     /** Token 消耗 */
-    private TokenUsage tokenUsage;
+    private TokenMeta tokenMeta;
     /** 耗时（毫秒） */
     private Long costTimeMs;
+    /** 意图（rag / chitchat） */
+    private String intent;
+    /** 模型显示名称 */
+    private String modelName;
 
     @Data
     public static class Citation {
@@ -47,7 +49,7 @@ public class ChatResponse {
     }
 
     @Data
-    public static class TokenUsage {
+    public static class TokenMeta {
         private Integer promptTokens;
         private Integer completionTokens;
         private Integer totalTokens;

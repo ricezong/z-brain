@@ -1,14 +1,13 @@
-package cn.kong.zbrain.service.impl;
+package cn.kong.zbrain.service;
 
 import cn.kong.zbrain.cache.ChatContextCache;
-import cn.kong.zbrain.dto.IntentResult;
+import cn.kong.zbrain.dto.response.IntentResult;
 import cn.kong.zbrain.dto.request.ChatRequest;
 import cn.kong.zbrain.dto.response.ChatResponse;
+import cn.kong.zbrain.dto.response.ThinkingStep;
 import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.enums.ChatIntent;
 import cn.kong.zbrain.enums.ChatMode;
-import cn.kong.zbrain.service.ChatEngine;
-import cn.kong.zbrain.service.IntentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -86,7 +85,13 @@ public class IntentRouter {
         // 4. 确保 sessionId 已设置
         request.setSessionId(session.getId());
 
-        // 5. 委派给引擎执行
+        // 5. 发送意图识别思考步骤
+        helper.sendSseEvent(emitter, "thinking", new ThinkingStep(
+                "intent", "意图识别",
+                effectiveIntent + " · 置信度 " + (int)(intentResult.confidence() * 100) + "%",
+                System.currentTimeMillis()));
+
+        // 6. 委派给引擎执行
         engine.chatStream(request, emitter);
     }
 

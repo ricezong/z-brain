@@ -60,8 +60,44 @@
           <div class="message-body">
             <div class="message-bubble" :class="msg.role">
               <div v-if="msg.role === 'user'" class="bubble-text">{{ msg.content }}</div>
-              <!-- AI 回答：渲染 markdown，[doc_N] 变为可点击徽章 -->
+              <!-- AI 回答 -->
               <template v-else>
+                <!-- 思考过程面板 -->
+                <div v-if="msg.thinking?.steps?.length" class="thinking-panel" :class="{ collapsed: !isThinkingExpanded(idx) && !msg.loading }">
+                  <div class="thinking-header" @click="msg.loading ? null : toggleThinking(idx)">
+                    <span class="thinking-status" v-if="msg.loading && !msg.content">
+                      <span class="thinking-dot"></span>
+                      <span>{{ msg.thinking.steps[msg.thinking.steps.length - 1]?.title }}…</span>
+                    </span>
+                    <span class="thinking-status" v-else>
+                      <el-icon class="thinking-icon-done"><Search /></el-icon>
+                      <span>思考过程 · {{ msg.thinking.steps.length }} 个步骤</span>
+                    </span>
+                    <el-icon v-if="!msg.loading" class="thinking-arrow" :class="{ rotated: isThinkingExpanded(idx) }"><ArrowDown /></el-icon>
+                  </div>
+                  <transition name="thinking-expand">
+                    <div v-show="msg.loading || isThinkingExpanded(idx)" class="thinking-body">
+                      <div class="thinking-timeline">
+                        <div
+                          v-for="(s, si) in msg.thinking.steps"
+                          :key="si"
+                          class="timeline-item"
+                          :class="{ active: msg.loading && si === msg.thinking.steps.length - 1 && !msg.content }"
+                        >
+                          <div class="timeline-dot">
+                            <span v-if="msg.loading && si === msg.thinking.steps.length - 1 && !msg.content" class="timeline-dot-pulse"></span>
+                            <span v-else class="timeline-dot-done"></span>
+                          </div>
+                          <div class="timeline-content">
+                            <span class="timeline-title">{{ s.title }}</span>
+                            <span class="timeline-detail">{{ s.detail }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </transition>
+                </div>
+                <!-- Markdown 渲染 -->
                 <MarkdownView
                   class="bubble-markdown"
                   :content="msg.content"
@@ -72,7 +108,8 @@
                 />
                 <span v-if="msg.loading && msg.content" class="streaming-cursor"></span>
               </template>
-              <div v-if="msg.loading && !msg.content" class="typing-indicator">
+              <!-- 闲聊等待：无思考过程时显示打字指示器 -->
+              <div v-if="msg.loading && !msg.content && !msg.thinking?.steps?.length" class="typing-indicator">
                 <span></span><span></span><span></span>
               </div>
             </div>
@@ -97,8 +134,11 @@
               <span v-if="msg.meta.modelName" class="meta-item">
                 <el-icon><Cpu /></el-icon> {{ msg.meta.modelName }}
               </span>
-              <span v-if="msg.meta.rewrittenQuery" class="meta-item">
-                <el-icon><Refresh /></el-icon> 改写: {{ msg.meta.rewrittenQuery }}
+              <span v-if="msg.meta.promptTokens != null" class="meta-item">
+                <el-icon><ChatDotSquare /></el-icon> 输入 {{ msg.meta.promptTokens }}
+              </span>
+              <span v-if="msg.meta.completionTokens != null" class="meta-item">
+                <el-icon><ChatDotRound /></el-icon> 输出 {{ msg.meta.completionTokens }}
               </span>
               <span v-if="msg.meta.costTimeMs" class="meta-item">
                 <el-icon><Timer /></el-icon> {{ msg.meta.costTimeMs }}ms
@@ -167,7 +207,7 @@
               <el-popover v-if="chatForm.mode === 'ask'" v-model:visible="kbPopoverVisible" trigger="click" placement="top-start" :width="220" popper-class="chat-tool-popover">
                 <template #reference>
                   <button class="tool-icon-btn" :class="{ active: chatForm.kbId }" title="选择知识库">
-                    <el-icon><Notebook /></el-icon>
+                    <el-icon><Reading /></el-icon>
                     <span v-if="currentKbName" class="model-name-label">{{ currentKbName }}</span>
                     <span v-else class="model-name-label">全局</span>
                   </button>
@@ -178,7 +218,7 @@
                     :class="{ active: !chatForm.kbId }"
                     @click="selectKb('')"
                   >
-                    <el-icon><Notebook /></el-icon>
+                    <el-icon><Reading /></el-icon>
                     <span class="tool-item-name">全局检索</span>
                     <el-icon v-if="!chatForm.kbId" class="tool-item-check"><Select /></el-icon>
                   </div>
@@ -188,7 +228,7 @@
                     :class="{ active: kb.id === chatForm.kbId }"
                     @click="selectKb(kb.id)"
                   >
-                    <el-icon><Notebook /></el-icon>
+                    <el-icon><Reading /></el-icon>
                     <span class="tool-item-name">{{ kb.name }}</span>
                     <el-icon v-if="kb.id === chatForm.kbId" class="tool-item-check"><Select /></el-icon>
                   </div>
@@ -304,8 +344,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   User, Refresh, Timer, MagicStick, Promotion, EditPen,
   Document, Reading, CopyDocument, RefreshRight, VideoPause, Aim,
-  Cpu, ChatDotRound, Notebook, Select,
-  Paperclip, ChatDotSquare, Operation, Close, Plus
+  Cpu, ChatDotRound, Select,
+  Paperclip, ChatDotSquare, Operation, Close, Plus,
+  Search, ArrowDown
 } from '@element-plus/icons-vue'
 import MarkdownView from '@/components/MarkdownView.vue'
 import { chatStream, rewriteQuery, getChatConfig, listSessions, deleteSession, getSessionMessages } from '@/api/chat'
@@ -336,6 +377,9 @@ const chatForm = reactive({
 const fileInputRef = ref(null)
 
 const messages = ref([])
+
+/** 展开的思考过程面板索引集（存 message index） */
+const expandedThinking = reactive(new Set())
 
 /** 当前选中的模型信息（用于工具栏模型按钮展示） */
 const currentModel = computed(() => {
@@ -452,10 +496,13 @@ function handleBubbleClick(event) {
   }
 }
 
-function scrollToBottom() {
+function scrollToBottom(smooth = false) {
   nextTick(() => {
     if (messageListRef.value) {
-      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+      messageListRef.value.scrollTo({
+        top: messageListRef.value.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      })
     }
   })
 }
@@ -484,31 +531,36 @@ function startStreaming(query, aiMsg) {
     { ...chatForm, mode: getBackendMode(), query, sessionId: chatForm.sessionId || undefined },
     {
       onMessage: (msg) => {
-        aiMsg.loading = false
         const { type, data } = msg
         if (type === 'session') {
           chatForm.sessionId = data
         } else if (type === 'content') {
           aiMsg.content += data
+          scrollToBottom()
         } else if (type === 'citations') {
           aiMsg.citations = data || []
           if (data) {
             data.forEach(c => { citationLookup[c.label] = c })
           }
-        } else if (type === 'rewritten_query') {
-          aiMsg.meta = { ...(aiMsg.meta || {}), rewrittenQuery: data }
+        } else if (type === 'thinking') {
+          if (!aiMsg.thinking) aiMsg.thinking = { steps: [] }
+          if (!aiMsg.thinking.steps) aiMsg.thinking.steps = []
+          aiMsg.thinking.steps.push(data)
+          scrollToBottom()
         } else if (type === 'intent') {
           aiMsg.meta = { ...(aiMsg.meta || {}), intent: data }
-        } else if (type === 'hyde') {
-          aiMsg.meta = { ...(aiMsg.meta || {}), hydeAnswer: data }
-        } else if (type === 'retrieval') {
-          aiMsg.meta = { ...(aiMsg.meta || {}), retrieval: data }
         }
       },
       onDone: (data) => {
         aiMsg.loading = false
         const costTimeMs = typeof data === 'object' ? data?.costTimeMs : (Date.now() - startTime)
-        aiMsg.meta = { ...(aiMsg.meta || {}), costTimeMs: costTimeMs || (Date.now() - startTime) }
+        const meta = { ...(aiMsg.meta || {}), costTimeMs: costTimeMs || (Date.now() - startTime) }
+        if (data && typeof data === 'object') {
+          if (data.promptTokens != null) meta.promptTokens = data.promptTokens
+          if (data.completionTokens != null) meta.completionTokens = data.completionTokens
+          if (data.totalTokens != null) meta.totalTokens = data.totalTokens
+        }
+        aiMsg.meta = meta
         streaming.value = false
         loadSessionList()
       },
@@ -527,7 +579,7 @@ function sendMessage(text) {
 
   const aiMsg = reactive({
     role: 'assistant', content: '', loading: true,
-    citations: [], meta: null
+    citations: [], meta: null, thinking: { steps: [] }
   })
   messages.value.push(aiMsg)
   scrollToBottom()
@@ -572,7 +624,7 @@ function regenerate(idx) {
   messages.value.splice(idx, 1)
   const aiMsg = reactive({
     role: 'assistant', content: '', loading: true,
-    citations: [], meta: null
+    citations: [], meta: null, thinking: { steps: [] }
   })
   messages.value.push(aiMsg)
   scrollToBottom()
@@ -615,6 +667,20 @@ function onModelChange() {
   // 下次发送消息时自动携带新 modelId
 }
 
+/** 切换思考过程面板展开/折叠 */
+function toggleThinking(idx) {
+  if (expandedThinking.has(idx)) {
+    expandedThinking.delete(idx)
+  } else {
+    expandedThinking.add(idx)
+  }
+}
+
+/** 思考过程面板是否展开 */
+function isThinkingExpanded(idx) {
+  return expandedThinking.has(idx)
+}
+
 /** 意图标签文案 */
 function intentLabel(intent) {
   const labels = { chitchat: '闲聊', rag: '知识库问答', search: '联网搜索', tool: '工具调用' }
@@ -625,6 +691,7 @@ function clearChat() {
   messages.value = []
   chatForm.sessionId = ''
   Object.keys(citationLookup).forEach(k => delete citationLookup[k])
+  expandedThinking.clear()
 }
 
 /** 新建对话 */
@@ -657,12 +724,26 @@ async function loadSession(session) {
     const logs = res.data || []
     logs.forEach(log => {
       messages.value.push({ role: 'user', content: log.query })
+      // 从 meta JSON 恢复元信息
+      let meta = null
+      if (log.meta) {
+        try {
+          const tu = typeof log.meta === 'string' ? JSON.parse(log.meta) : log.meta
+          meta = {}
+          if (tu.intent) meta.intent = tu.intent
+          if (tu.modelName) meta.modelName = tu.modelName
+          if (tu.promptTokens != null) meta.promptTokens = tu.promptTokens
+          if (tu.completionTokens != null) meta.completionTokens = tu.completionTokens
+          if (tu.totalTokens != null) meta.totalTokens = tu.totalTokens
+          if (tu.costTimeMs != null) meta.costTimeMs = tu.costTimeMs
+        } catch { /* ignore */ }
+      }
       messages.value.push({
         role: 'assistant', content: log.answer || '', loading: false,
-        citations: [], meta: log.rewrittenQuery ? { rewrittenQuery: log.rewrittenQuery } : null
+        citations: [], meta, thinking: { steps: [] }
       })
     })
-    scrollToBottom()
+    scrollToBottom(true)
   } catch { /* ignore */ }
 }
 
@@ -763,7 +844,7 @@ onMounted(() => {
 
 /* ==================== 对话主区 ==================== */
 .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.message-list { flex: 1; overflow-y: auto; padding: 32px; scroll-behavior: smooth; }
+.message-list { flex: 1; overflow-y: auto; padding: 32px; }
 
 /* ==================== 欢迎屏 ==================== */
 .welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; }
@@ -794,7 +875,7 @@ onMounted(() => {
 .message-row.user .message-body { display: flex; flex-direction: column; align-items: flex-end; }
 .message-bubble { border-radius: var(--radius-md); padding: 14px 18px; max-width: 100%; word-break: break-word; }
 .message-bubble.user { background: var(--primary-gradient); color: #fff; }
-.message-bubble.assistant { background: var(--bg-card); border: 1px solid var(--border-light); box-shadow: var(--shadow-sm); }
+.message-bubble.assistant { background: var(--bg-card); border: 1px solid var(--border-light); box-shadow: var(--shadow-sm); min-height: 28px; }
 .bubble-text { font-size: 14px; line-height: 1.7; }
 
 /* ==================== Markdown 渲染 ==================== */
@@ -877,6 +958,111 @@ onMounted(() => {
 }
 .bubble-markdown :deep(.citation-ref:hover::before) {
   background: #fff;
+}
+
+/* ==================== 思考过程面板 ==================== */
+.thinking-panel {
+  margin-bottom: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-page);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.thinking-panel.collapsed .thinking-body { display: none; }
+.thinking-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; cursor: pointer; user-select: none;
+  transition: background 0.15s;
+}
+.thinking-header:hover { background: var(--bg-hover); }
+.thinking-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.thinking-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--primary);
+  animation: thinking-pulse 1.2s infinite ease-in-out;
+  flex-shrink: 0;
+}
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+.thinking-icon-done { font-size: 14px; color: var(--primary); }
+.thinking-arrow {
+  font-size: 12px; color: var(--text-placeholder);
+  transition: transform 0.2s;
+}
+.thinking-arrow.rotated { transform: rotate(180deg); }
+
+/* 展开过渡动画 */
+.thinking-expand-enter-active, .thinking-expand-leave-active {
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+.thinking-expand-enter-from, .thinking-expand-leave-to {
+  opacity: 0; max-height: 0;
+}
+.thinking-expand-enter-to, .thinking-expand-leave-from {
+  opacity: 1; max-height: 500px;
+}
+
+.thinking-body {
+  padding: 4px 12px 10px;
+}
+
+/* 时间线 */
+.thinking-timeline {
+  display: flex; flex-direction: column; gap: 0;
+  padding-left: 4px;
+}
+.timeline-item {
+  display: flex; gap: 10px; padding: 5px 0;
+  animation: timeline-appear 0.25s ease;
+}
+@keyframes timeline-appear {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.timeline-dot {
+  position: relative; flex-shrink: 0;
+  width: 14px; height: 14px;
+  display: flex; align-items: center; justify-content: center;
+  padding-top: 3px;
+}
+/* 竖线（通过伪元素） */
+.timeline-item:not(:last-child) .timeline-dot::after {
+  content: '';
+  position: absolute;
+  top: 16px; left: 50%;
+  transform: translateX(-50%);
+  width: 1.5px; height: calc(100% + 2px);
+  background: var(--border-light);
+}
+.timeline-dot-done {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--primary);
+  opacity: 0.7;
+  z-index: 1;
+}
+.timeline-dot-pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--primary);
+  z-index: 1;
+  animation: thinking-pulse 1.2s infinite ease-in-out;
+}
+.timeline-content {
+  display: flex; flex-direction: column; gap: 1px;
+  padding-bottom: 2px; min-width: 0; flex: 1;
+}
+.timeline-title {
+  font-size: 12px; font-weight: 600; color: var(--text-regular);
+}
+.timeline-detail {
+  font-size: 11px; color: var(--text-placeholder); line-height: 1.5;
+  word-break: break-word;
 }
 
 /* ==================== 流式光标 ==================== */

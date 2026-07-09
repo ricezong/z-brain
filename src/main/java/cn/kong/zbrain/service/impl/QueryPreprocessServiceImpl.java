@@ -2,6 +2,7 @@ package cn.kong.zbrain.service.impl;
 
 import cn.kong.zbrain.cache.ChatContextCache;
 import cn.kong.zbrain.config.ZBrainProperties;
+import cn.kong.zbrain.dto.response.ThinkingStep;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.QueryPreprocessService;
 import cn.kong.zbrain.service.SysPromptService;
@@ -10,11 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 查询预处理服务实现
  *
- * <p>实现 Query 改写、HyDE 两大能力。
+ * <p>实现 Query 改写能力。
  * 意图识别已迁移至 {@link cn.kong.zbrain.service.impl.IntentServiceImpl}。
  * 所有提示词从数据库 sys_prompt 表读取，不再硬编码。</p>
  *
@@ -132,27 +134,13 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
     }
 
     @Override
-    public String generateHyDE(String query) {
-        try {
-            // 从数据库读取提示词模板
-            String promptTemplate = sysPromptService.getContent("hyde");
-            if (promptTemplate == null) {
-                log.warn("hyde 提示词未配置，使用原始查询");
-                return query;
-            }
-
-            String prompt = promptTemplate.replace("{query}", query);
-
-            String hyde = llmService.simpleChat(prompt);
-            return hyde == null ? query : hyde.trim();
-        } catch (Exception e) {
-            log.warn("HyDE 生成失败，使用原始查询: {}", e.getMessage());
-            return query;
-        }
+    public PreprocessResult preprocess(String query, String sessionId) {
+        return preprocess(query, sessionId, null);
     }
 
     @Override
-    public PreprocessResult preprocess(String query, String sessionId) {
+    public PreprocessResult preprocess(String query, String sessionId,
+                                        Consumer<ThinkingStep> onThinking) {
         // 意图识别已由 IntentService 负责，此处始终执行完整的 RAG 预处理
         List<ChatContextCache.ChatMessage> history = chatContextCache.getRecentMessages(sessionId, HISTORY_ROUNDS);
 
@@ -163,25 +151,17 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
             rewrittenQuery = rewriteQuery(query, sessionId);
         }
 
-        String hydeAnswer = null;
-        String vectorQuery = rewrittenQuery;
-        if (qpConfig.isEnableHyde()) {
-            hydeAnswer = generateHyDE(rewrittenQuery);
-            // 确保 vectorQuery 不为 null
-            if (hydeAnswer != null && !hydeAnswer.isBlank()) {
-                vectorQuery = hydeAnswer;
-            } else {
-                log.warn("HyDE 生成为空，使用改写后的查询作为向量查询");
-                hydeAnswer = null;
-            }
+        if (onThinking != null) {
+            onThinking.accept(new ThinkingStep(
+                    "query_rewrite", "查询改写",
+                    rewrittenQuery, System.currentTimeMillis()));
         }
 
         return new PreprocessResult(
                 query,
                 rewrittenQuery,
-                hydeAnswer,
                 false,
-                vectorQuery,
+                rewrittenQuery,
                 rewrittenQuery,
                 history
         );

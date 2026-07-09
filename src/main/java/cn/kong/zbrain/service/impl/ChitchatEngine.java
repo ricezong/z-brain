@@ -7,15 +7,19 @@ import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.enums.ChatIntent;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.ChatEngine;
+import cn.kong.zbrain.service.ChatSessionHelper;
 import cn.kong.zbrain.service.SysPromptService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 闲聊引擎
@@ -61,6 +65,7 @@ public class ChitchatEngine implements ChatEngine {
         response.setCitations(new ArrayList<>());
         response.setHitChunkIds(new ArrayList<>());
         response.setCostTimeMs(System.currentTimeMillis() - startTime);
+        response.setIntent("chitchat");
 
         chatContextCache.appendMessage(session.getId(), ChatContextCache.ChatMessage.user(request.getQuery()));
         chatContextCache.appendMessage(session.getId(), ChatContextCache.ChatMessage.assistant(answer));
@@ -82,6 +87,7 @@ public class ChitchatEngine implements ChatEngine {
 
             String chitchatPrompt = getChitchatPrompt();
             StringBuilder fullAnswer = new StringBuilder();
+            AtomicReference<Usage> usageRef = new AtomicReference<>();
             llmService.chatStream(
                     request.getModelId(),
                     chitchatPrompt,
@@ -91,7 +97,9 @@ public class ChitchatEngine implements ChatEngine {
                     chunk -> {
                         fullAnswer.append(chunk);
                         helper.sendSseEvent(emitter, "content", chunk);
-                    });
+                    },
+                    usage -> usageRef.set(usage)
+            );
 
             // 上下文与日志沉淀
             chatContextCache.appendMessage(session.getId(), ChatContextCache.ChatMessage.user(request.getQuery()));
@@ -106,11 +114,18 @@ public class ChitchatEngine implements ChatEngine {
             logResponse.setCitations(new ArrayList<>());
             logResponse.setHitChunkIds(new ArrayList<>());
             logResponse.setCostTimeMs(System.currentTimeMillis() - startTime);
+            logResponse.setIntent("chitchat");
+            Usage usage = usageRef.get();
+            if (usage != null) {
+                ChatResponse.TokenMeta tu = new ChatResponse.TokenMeta();
+                tu.setPromptTokens(usage.getPromptTokens());
+                tu.setCompletionTokens(usage.getCompletionTokens());
+                tu.setTotalTokens(usage.getTotalTokens());
+                logResponse.setTokenMeta(tu);
+            }
             helper.saveLog(request, session, null, logResponse, new ArrayList<>());
 
-            helper.sendSseEvent(emitter, "done", Map.of(
-                    "costTimeMs", System.currentTimeMillis() - startTime,
-                    "intent", "chitchat"));
+            helper.sendSseEvent(emitter, "done", buildDoneData(startTime, usageRef.get()));
             emitter.complete();
 
         } catch (Exception e) {
@@ -126,5 +141,18 @@ public class ChitchatEngine implements ChatEngine {
             chitchatPrompt = "你是智多星知识库助手，请友好地回答用户问题。回答使用 Markdown 格式输出。";
         }
         return chitchatPrompt;
+    }
+
+    /** 构建 done 事件数据（含耗时、意图、Token 用量） */
+    private static Map<String, Object> buildDoneData(long startTime, Usage usage) {
+        Map<String, Object> doneData = new HashMap<>();
+        doneData.put("costTimeMs", System.currentTimeMillis() - startTime);
+        doneData.put("intent", "chitchat");
+        if (usage != null) {
+            doneData.put("promptTokens", usage.getPromptTokens());
+            doneData.put("completionTokens", usage.getCompletionTokens());
+            doneData.put("totalTokens", usage.getTotalTokens());
+        }
+        return doneData;
     }
 }

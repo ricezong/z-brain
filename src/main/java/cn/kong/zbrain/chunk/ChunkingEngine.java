@@ -9,8 +9,8 @@ import java.util.List;
  *
  * <p>支持父子分块（Parent-Child）策略：
  * <ul>
- *   <li>父块保留完整语义（1000 Token）</li>
- *   <li>子块用于精确检索（200 Token）</li>
+ *   <li>父层递归字符切分（1000 Token，重叠 150）</li>
+ *   <li>子层递归字符切分（300 Token，重叠 40）</li>
  *   <li>子块记录父块 ID 及字符偏移量</li>
  * </ul>
  * </p>
@@ -29,18 +29,6 @@ public interface ChunkingEngine {
      * @return 分块列表（父块在前，子块在后）
      */
     List<Chunk> chunk(String text, Long docId, Long kbId, Integer chunkSize);
-
-    /**
-     * 对单个文本进行子块切分
-     *
-     * @param parentContent 父块内容
-     * @param parentId      父块 ID
-     * @param docId         文档 ID
-     * @param kbId          知识库 ID
-     * @param startOffset   在原文中的起始偏移
-     * @return 子块列表
-     */
-    List<Chunk> splitToChildren(String parentContent, Long parentId, Long docId, Long kbId, int startOffset);
 
     /**
      * 合并多个分块内容

@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS kb_knowledge_base (
     description     VARCHAR(512),
     category        VARCHAR(64)   DEFAULT 'general',
     prompt_template_id BIGINT,
-    chunk_size      INT           NOT NULL DEFAULT 256,  -- 分块大小（Token 数），默认 256
+    chunk_size      INT           NOT NULL DEFAULT 300,  -- 子块分块大小（Token 数），默认 300
     status          VARCHAR(16)   DEFAULT 'active',  -- active / archived
     doc_count       INT           DEFAULT 0,
     chunk_count     INT           DEFAULT 0,
@@ -40,7 +40,7 @@ COMMENT ON COLUMN kb_knowledge_base.id IS '主键 ID';
 COMMENT ON COLUMN kb_knowledge_base.name IS '知识库名称';
 COMMENT ON COLUMN kb_knowledge_base.category IS '知识库分类';
 COMMENT ON COLUMN kb_knowledge_base.prompt_template_id IS '关联提示词模板 ID';
-COMMENT ON COLUMN kb_knowledge_base.chunk_size IS '分块大小（Token 数），默认 256';
+COMMENT ON COLUMN kb_knowledge_base.chunk_size IS '子块分块大小（Token 数），默认 300';
 COMMENT ON COLUMN kb_knowledge_base.status IS '状态：active-启用，archived-归档';
 
 CREATE INDEX IF NOT EXISTS idx_kb_kb_status ON kb_knowledge_base(status);
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS kb_document (
     file_size       BIGINT,
     file_type       VARCHAR(32),
     file_hash       VARCHAR(64),
-    chunk_size      INT,                            -- 分块大小（Token 数），NULL 时使用知识库配置
+    chunk_size      INT,                            -- 子块分块大小（Token 数），NULL 时使用知识库配置
     status          VARCHAR(32)   DEFAULT 'pending',
     -- pending-待解析 / parsing-解析中 / pending_review-待审核
     -- embedding-向量化中 / success-完成 / failed-失败
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS kb_document (
 );
 COMMENT ON TABLE  kb_document IS '文档表';
 COMMENT ON COLUMN kb_document.status IS '文档状态机：pending/parsing/pending_review/embedding/success/failed';
-COMMENT ON COLUMN kb_document.chunk_size IS '分块大小（Token 数），NULL 时使用知识库的 chunk_size';
+COMMENT ON COLUMN kb_document.chunk_size IS '子块分块大小（Token 数），NULL 时使用知识库的 chunk_size';
 
 CREATE INDEX IF NOT EXISTS idx_kb_doc_kbid ON kb_document(kb_id);
 CREATE INDEX IF NOT EXISTS idx_kb_doc_status ON kb_document(status);
@@ -169,11 +169,10 @@ CREATE TABLE IF NOT EXISTS kb_chat_log (
     user_id         VARCHAR(64),
     query           TEXT          NOT NULL,
     rewritten_query TEXT,                          -- 改写后的 Query
-    hyde_answer     TEXT,                          -- HyDE 假设性答案
     answer          TEXT,
     hit_chunk_ids   JSONB,                         -- 命中的分块 ID 列表
     retrieval_info  JSONB,                         -- 检索过程信息（各路召回数、RRF 分数等）
-    token_usage     JSONB,                         -- Token 消耗统计
+    meta            JSONB,                         -- 对话元信息（意图、模型、Token 消耗、耗时等聚合信息）
     cost_time_ms    BIGINT,                        -- 总耗时
     create_time     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
 );
@@ -208,7 +207,7 @@ END $$;
 -- ==================== 系统提示词表 ====================
 CREATE TABLE IF NOT EXISTS sys_prompt (
     id              BIGSERIAL PRIMARY KEY,
-    prompt_key      VARCHAR(64)   NOT NULL UNIQUE,      -- 逻辑键，如 query_rewrite / hyde / keyword_extract / chitchat
+    prompt_key      VARCHAR(64)   NOT NULL UNIQUE,      -- 逻辑键，如 query_rewrite / keyword_extract / chitchat
     name            VARCHAR(128)  NOT NULL,             -- 展示名称
     description     VARCHAR(512),                       -- 用途说明
     content         TEXT          NOT NULL,             -- 提示词内容（支持 {query} {history} 等占位符）
@@ -217,7 +216,7 @@ CREATE TABLE IF NOT EXISTS sys_prompt (
     update_time     TIMESTAMP     DEFAULT CURRENT_TIMESTAMP
 );
 COMMENT ON TABLE  sys_prompt IS '系统提示词表（统一管理所有硬编码提示词）';
-COMMENT ON COLUMN sys_prompt.prompt_key IS '逻辑键：query_rewrite / hyde / keyword_extract / chitchat / no_result';
+COMMENT ON COLUMN sys_prompt.prompt_key IS '逻辑键：query_rewrite / keyword_extract / chitchat / no_result';
 COMMENT ON COLUMN sys_prompt.content IS '提示词内容，支持 {query} {history} 占位符';
 
 -- ==================== LLM 模型配置表 ====================
@@ -322,30 +321,6 @@ INSERT INTO sys_prompt (prompt_key, name, description, content) VALUES
 
 # 输出
 扩展后的查询：')
-ON CONFLICT (prompt_key) DO NOTHING;
-
-INSERT INTO sys_prompt (prompt_key, name, description, content) VALUES
-('hyde',
- 'HyDE 假设性答案提示词',
- '生成假设性答案用于向量检索增强，包含与问题相关的关键词和概念',
- '# 角色
-你是一个假设性答案生成器，为向量检索提供语义增强。
-
-# 任务
-针对用户问题，生成一段假设性答案。该答案不要求事实准确，但需包含与问题高度相关的关键词、概念和表述方式，以提升向量检索的召回率。
-
-# 规则
-1. 答案长度控制在 100-200 字
-2. 尽可能包含问题涉及的专业术语、关键词和概念
-3. 使用陈述句式，模拟真实答案的语言风格
-4. 使用中文生成
-5. 仅输出答案内容，不要任何解释、引号或前缀
-
-# 输入
-问题：{query}
-
-# 输出
-假设性答案：')
 ON CONFLICT (prompt_key) DO NOTHING;
 
 INSERT INTO sys_prompt (prompt_key, name, description, content) VALUES

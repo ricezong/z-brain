@@ -32,10 +32,10 @@
 | :--- | :--- |
 | 知识库管理 | 多知识库空间隔离，文档增删改查及状态流转 |
 | 文档导入 | 接收文件，Tika / LlamaIndex Cloud 解析为 Markdown，异步处理 |
-| 分块引擎 | 语义边界父块（512-2048 Token）+ 递归字符子块（256 Token）|
+| 分块引擎 | 双层递归字符分块：父块（1000 Token）+ 子块（300 Token）|
 | 人工审核工作台 | 双屏对比，支持合并、拆分、修改、删除、调整父子关系 |
 | 向量化与存储 | 百炼 SDK 批量向量化，Redis 缓存，写入 PG |
-| 查询预处理 | 意图识别、Query 改写、HyDE 增强（提示词全部数据库管理）|
+| 查询预处理 | 意图识别、Query 改写（提示词全部数据库管理）|
 | 混合检索与重排 | 向量/全文/模糊三路召回 + RRF 融合 + Rerank |
 | 问答与溯源 | Token 预算控制、SSE 流式输出、Markdown 渲染、引用标记解析 |
 | 对话与日志 | Redis 短期 + PG 长期，全链路审计日志 |
@@ -65,7 +65,7 @@ psql -d zbrain -f src/main/resources/db/schema.sql
 初始化脚本会自动创建以下内容：
 - 7 张业务表（知识库、文档、分块、会话、日志等）
 - 2 张系统配置表（`sys_prompt` 提示词管理、`sys_llm_model` 模型配置管理）
-- 5 条默认系统提示词（query_rewrite / keyword_extract / hyde / chitchat / no_result）
+- 4 条默认系统提示词（query_rewrite / keyword_extract / chitchat / no_result）
 - 1 条默认 RAG 提示词模板
 - 1 条默认 LLM 模型配置（DeepSeek 对话模型）
 - 全部索引、触发器、中文全文检索配置
@@ -119,7 +119,6 @@ java -jar target/z-brain-1.0.0.jar
 | :--- | :--- | :--- |
 | `query_rewrite` | 查询改写 | 多轮对话指代消解，将模糊提问改写为独立查询 |
 | `keyword_extract` | 关键词扩展 | 单轮对话关键词提取增强，补充同义词 |
-| `hyde` | HyDE 假设性答案 | 生成假设性答案用于向量检索增强 |
 | `chitchat` | 闲聊提示词 | 闲聊场景的系统提示词，要求 Markdown 格式输出 |
 | `no_result` | 无结果提示 | 检索无结果时的友好提示文案 |
 
@@ -144,12 +143,12 @@ java -jar target/z-brain-1.0.0.jar
 
 ## 七、核心链路
 
-### 链路一：文档解析与语义分块
+### 链路一：文档解析与递归字符分块
 1. 前端上传文件，立即返回文档 ID
 2. 后台解析线程池异步执行：PDF 优先使用 LlamaIndex Cloud 解析，其余格式走 Tika
 3. 解析输出 Markdown 格式，保留标题、表格等语义结构
-4. `MarkdownSemanticChunker` 按语义边界切分父块（512-2048 Token）
-5. `RecursiveCharacterSplitter` 按递归字符切分子块（256 Token，重叠 32）
+4. `RecursiveCharacterSplitter` 父层递归字符切分（1000 Token，重叠 150）
+5. `RecursiveCharacterSplitter` 子层递归字符切分（300 Token，重叠 40）
 6. 子块 metadata 记录父块 ID、字符偏移量、页码
 7. 文档状态流转为 `pending_review`
 
@@ -170,7 +169,6 @@ java -jar target/z-brain-1.0.0.jar
 1. **意图识别**：轻量级判断闲聊或知识问答（关键词匹配 + 长度/疑问词规则）
 2. **Query 改写**：多轮对话时利用 LLM 改写指代不清的 Query（提示词从数据库读取）
 3. **关键词扩展**：单轮对话时提取核心关键词并补充同义词（提示词从数据库读取）
-4. **HyDE 增强**：生成假设性答案用于向量检索（提示词从数据库读取）
 
 ### 链路五：多路召回与 RRF 融合
 1. 三路召回：向量（Top 20）+ 全文（Top 20）+ 模糊（Top 10）
@@ -308,7 +306,8 @@ z-brain/
 │   │   │   └── SysLlmModelServiceImpl.java      # LLM 模型配置管理
 │   │   └── ...（接口定义）
 │   ├── llm/                               # LLM 服务
-│   │   ├── LLMService.java               # LLM 接口（含 clearCache）
+│   │   ├── LLMService.java               # LLM 对话接口（同步/流式调用）
+│   │   ├── LLMModelRegistry.java          # LLM 模型注册中心接口（生命周期管理）
 │   │   └── impl/
 │   │       └── LLMServiceImpl.java        # 基于 Spring AI + 数据库配置
 │   ├── mapper/                            # MyBatis Mapper
@@ -321,9 +320,8 @@ z-brain/
 │   │   └── ...（业务实体）
 │   ├── chunk/                             # 分块引擎
 │   │   ├── ChunkingEngine.java            # 分块接口
-│   │   ├── MarkdownSemanticChunker.java   # Markdown 语义边界切分
 │   │   └── impl/
-│   │       └── DefaultChunkingEngine.java # 默认分块引擎
+│   │       └── DefaultChunkingEngine.java # 默认分块引擎（双层递归字符分块）
 │   ├── parser/                            # 文档解析
 │   │   ├── DocumentParser.java            # Tika 解析器（多格式）
 │   │   ├── LlamaIndexPdfParser.java       # LlamaIndex Cloud PDF 解析
@@ -347,7 +345,7 @@ z-brain/
 │   ├── enums/                             # 枚举
 │   ├── util/                              # 工具类
 │   │   ├── TokenUtils.java                # Token 计数
-│   │   ├── RecursiveCharacterSplitter.java # 递归字符分块
+│   │   ├── RecursiveCharacterSplitter.java # 递归字符分块器
 │   │   └── CommonUtils.java               # 通用工具
 │   └── task/
 │       └── MaintenanceTask.java           # 定时维护任务
@@ -373,7 +371,7 @@ z-brain/
 | `zbrain.document.*` | 文档上传目录、解析目录、允许的文件类型 |
 | `zbrain.chunk.*` | 分块策略：父块 512-2048 Token，子块 256 Token，重叠 32 |
 | `zbrain.retrieval.*` | 检索参数：向量 Top 20、全文 Top 20、RRF k=60、Rerank Top 5 |
-| `zbrain.query-preprocess.*` | 查询预处理开关：Query 改写、HyDE |
+| `zbrain.query-preprocess.*` | 查询预处理开关：Query 改写 |
 | `zbrain.llm.*` | LLM 上下文预算：总 8K Token，预留 2K |
 | `zbrain.cache.*` | Redis Key 前缀与 TTL |
 | `zbrain.dashscope.*` | 百炼 SDK 配置（API Key、模型名称、批量大小、超时、重试） |

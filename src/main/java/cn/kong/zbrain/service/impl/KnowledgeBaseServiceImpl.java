@@ -36,7 +36,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         kb.setDescription(request.getDescription());
         kb.setCategory(StringUtils.hasText(request.getCategory()) ? request.getCategory() : "general");
         kb.setPromptTemplateId(request.getPromptTemplateId());
-        kb.setChunkSize(request.getChunkSize() != null ? request.getChunkSize() : 256);
+        kb.setChunkSize(request.getChunkSize() != null ? request.getChunkSize() : 300);
         kb.setStatus("active");
         kb.setDocCount(0);
         kb.setChunkCount(0);

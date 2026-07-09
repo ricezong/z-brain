@@ -23,7 +23,7 @@ import java.util.List;
  *   <li>最后把切出的语义片段按目标 token 大小聚合，并用滑动窗口维护 overlap。</li>
  * </ol>
  *
- * <p>分隔符优先级（中文优先）：{@code \n\n → \n → 。→ ！→ ？→ ；→ . → ! → ? → ; → 空格 → 强制切}。
+ * <p>分隔符优先级（中文优先）：{@code \n\n → \n → 。→ ！→ ？→ ，→ 空格 → 强制切}。
  * 切分时分隔符保留在片段末尾，聚合后语义自然连贯。</p>
  *
  * <p>token 计数基于 jtokkit 的 cl100k_base 编码，与 GPT/Qwen 系列模型接近，比"1 token≈2 字符"
@@ -41,7 +41,7 @@ public final class RecursiveCharacterSplitter {
      * 末尾的空字符串表示"已无更细分隔符，兜底强制按 token 切"。
      */
     private static final List<String> DEFAULT_SEPARATORS = Arrays.asList(
-            "\n\n", "\n", "。", "！", "？", "；", ".", "!", "?", ";", " ", ""
+            "\n\n", "\n", "。", "！", "？", "，", " ", ""
     );
 
     /** 标点符号集合（用于 forceSplit 兜底切分时回退到句子边界） */
@@ -51,7 +51,7 @@ public final class RecursiveCharacterSplitter {
     }
 
     /**
-     * 按目标 token 大小递归切分文本，带 overlap。
+     * 按目标 token 大小递归切分文本，带 overlap（使用默认分隔符）。
      *
      * @param text            原始文本
      * @param targetTokenSize 每个分块的目标 token 上限
@@ -59,6 +59,19 @@ public final class RecursiveCharacterSplitter {
      * @return 切分后的文本列表
      */
     public static List<String> split(String text, int targetTokenSize, int overlapTokens) {
+        return split(text, targetTokenSize, overlapTokens, DEFAULT_SEPARATORS);
+    }
+
+    /**
+     * 按目标 token 大小递归切分文本，带 overlap（支持自定义分隔符优先级）。
+     *
+     * @param text            原始文本
+     * @param targetTokenSize 每个分块的目标 token 上限
+     * @param overlapTokens   相邻分块的重叠 token 数（滑动窗口）
+     * @param separators      分隔符优先级列表（从高到低，末尾空字符串表示强制切）
+     * @return 切分后的文本列表
+     */
+    public static List<String> split(String text, int targetTokenSize, int overlapTokens, List<String> separators) {
         if (text == null || text.isEmpty()) {
             return Collections.emptyList();
         }
@@ -70,7 +83,7 @@ public final class RecursiveCharacterSplitter {
         }
 
         // 1. 递归切出语义片段（不含 overlap，保证语义边界干净）
-        List<String> splits = recursiveSplit(text, targetTokenSize, DEFAULT_SEPARATORS, 0);
+        List<String> splits = recursiveSplit(text, targetTokenSize, separators, 0);
         // 2. 按目标大小聚合并维护 overlap 滑动窗口
         return mergeSplits(splits, targetTokenSize, overlapTokens);
     }

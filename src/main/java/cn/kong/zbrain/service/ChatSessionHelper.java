@@ -1,4 +1,4 @@
-package cn.kong.zbrain.service.impl;
+package cn.kong.zbrain.service;
 
 import cn.kong.zbrain.cache.ChatContextCache;
 import cn.kong.zbrain.dto.request.ChatRequest;
@@ -6,10 +6,10 @@ import cn.kong.zbrain.dto.response.ChatResponse;
 import cn.kong.zbrain.dto.response.RetrievalResult;
 import cn.kong.zbrain.entity.ChatLog;
 import cn.kong.zbrain.entity.ChatSession;
+import cn.kong.zbrain.entity.SysLlmModel;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.mapper.ChatLogMapper;
 import cn.kong.zbrain.mapper.ChatSessionMapper;
-import cn.kong.zbrain.service.QueryPreprocessService;
 import cn.kong.zbrain.util.CommonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +38,7 @@ public class ChatSessionHelper {
     private final ChatSessionMapper chatSessionMapper;
     private final ChatLogMapper chatLogMapper;
     private final ObjectMapper objectMapper;
+    private final SysLlmModelService sysLlmModelService;
 
     /**
      * 创建或获取会话
@@ -97,6 +98,37 @@ public class ChatSessionHelper {
     }
 
     /**
+     * 分页查询用户会话列表
+     *
+     * @param userId   用户 ID
+     * @param offset   偏移量
+     * @param pageSize 每页大小
+     * @return 会话列表
+     */
+    public List<ChatSession> listSessions(String userId, int offset, int pageSize) {
+        return chatSessionMapper.selectByUserId(userId, offset, pageSize);
+    }
+
+    /**
+     * 删除会话
+     *
+     * @param sessionId 会话 ID
+     */
+    public void deleteSession(String sessionId) {
+        chatSessionMapper.deleteById(sessionId);
+    }
+
+    /**
+     * 获取会话历史消息
+     *
+     * @param sessionId 会话 ID
+     * @return 对话日志列表
+     */
+    public List<ChatLog> getSessionMessages(String sessionId) {
+        return chatLogMapper.selectBySessionId(sessionId);
+    }
+
+    /**
      * 保存对话日志
      */
     public void saveLog(ChatRequest request, ChatSession session,
@@ -110,7 +142,6 @@ public class ChatSessionHelper {
             logEntry.setUserId(request.getUserId());
             logEntry.setQuery(request.getQuery());
             logEntry.setRewrittenQuery(preprocess != null ? preprocess.rewrittenQuery() : null);
-            logEntry.setHydeAnswer(preprocess != null ? preprocess.hydeAnswer() : null);
             logEntry.setAnswer(response.getAnswer());
             logEntry.setHitChunkIds(objectMapper.writeValueAsString(response.getHitChunkIds() != null
                     ? response.getHitChunkIds() : new ArrayList<>()));
@@ -122,9 +153,24 @@ public class ChatSessionHelper {
                     : new ArrayList<>());
             logEntry.setRetrievalInfo(objectMapper.writeValueAsString(retrievalInfo));
 
-            Map<String, Object> tokenUsage = new HashMap<>();
-            tokenUsage.put("costTimeMs", response.getCostTimeMs());
-            logEntry.setTokenUsage(objectMapper.writeValueAsString(tokenUsage));
+            Map<String, Object> metaMap = new HashMap<>();
+            metaMap.put("costTimeMs", response.getCostTimeMs());
+            metaMap.put("intent", response.getIntent());
+            // 解析模型显示名称
+            String modelName = response.getModelName();
+            if (modelName == null && request.getModelId() != null) {
+                SysLlmModel model = sysLlmModelService.getById(request.getModelId());
+                if (model != null) {
+                    modelName = model.getName();
+                }
+            }
+            metaMap.put("modelName", modelName);
+            if (response.getTokenMeta() != null) {
+                metaMap.put("promptTokens", response.getTokenMeta().getPromptTokens());
+                metaMap.put("completionTokens", response.getTokenMeta().getCompletionTokens());
+                metaMap.put("totalTokens", response.getTokenMeta().getTotalTokens());
+            }
+            logEntry.setMeta(objectMapper.writeValueAsString(metaMap));
             logEntry.setCostTimeMs(response.getCostTimeMs());
 
             chatLogMapper.insert(logEntry);

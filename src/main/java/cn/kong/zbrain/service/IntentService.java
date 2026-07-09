@@ -1,7 +1,7 @@
 package cn.kong.zbrain.service;
 
 import cn.kong.zbrain.cache.ChatContextCache;
-import cn.kong.zbrain.dto.IntentResult;
+import cn.kong.zbrain.dto.response.IntentResult;
 
 import java.util.List;
 

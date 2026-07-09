@@ -8,11 +8,10 @@ import cn.kong.zbrain.dto.response.RewriteResponse;
 import cn.kong.zbrain.entity.ChatLog;
 import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.entity.SysLlmModel;
-import cn.kong.zbrain.mapper.ChatLogMapper;
-import cn.kong.zbrain.mapper.ChatSessionMapper;
+import cn.kong.zbrain.service.ChatSessionHelper;
 import cn.kong.zbrain.service.QueryPreprocessService;
 import cn.kong.zbrain.service.SysLlmModelService;
-import cn.kong.zbrain.service.impl.IntentRouter;
+import cn.kong.zbrain.service.IntentRouter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -41,8 +40,7 @@ public class ChatController {
     private final IntentRouter intentRouter;
     private final QueryPreprocessService queryPreprocessService;
     private final SysLlmModelService sysLlmModelService;
-    private final ChatSessionMapper chatSessionMapper;
-    private final ChatLogMapper chatLogMapper;
+    private final ChatSessionHelper chatSessionHelper;
     @Qualifier("sseStreamExecutor")
     private final Executor sseStreamExecutor;
 
@@ -119,21 +117,21 @@ public class ChatController {
             @RequestParam(defaultValue = "50") int pageSize) {
         String userId = "anonymous";
         int offset = (pageNum - 1) * pageSize;
-        List<ChatSession> sessions = chatSessionMapper.selectByUserId(userId, offset, pageSize);
+        List<ChatSession> sessions = chatSessionHelper.listSessions(userId, offset, pageSize);
         return Result.success(sessions);
     }
 
     @Operation(summary = "删除会话")
     @DeleteMapping("/sessions/{sessionId}")
     public Result<Void> deleteSession(@PathVariable String sessionId) {
-        chatSessionMapper.deleteById(sessionId);
+        chatSessionHelper.deleteSession(sessionId);
         return Result.success();
     }
 
     @Operation(summary = "获取会话历史消息")
     @GetMapping("/sessions/{sessionId}/messages")
     public Result<List<ChatLog>> getSessionMessages(@PathVariable String sessionId) {
-        List<ChatLog> logs = chatLogMapper.selectBySessionId(sessionId);
+        List<ChatLog> logs = chatSessionHelper.getSessionMessages(sessionId);
         return Result.success(logs);
     }
 }

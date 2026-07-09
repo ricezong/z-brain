@@ -89,7 +89,7 @@ const features = [
   { title: '知识库管理', desc: '创建、配置和管理知识库，支持分类与分块策略配置', icon: 'Collection', gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)', path: '/knowledge-bases' },
   { title: '文档管理', desc: '上传多种格式文档，实时跟踪解析进度，支持向量化触发', icon: 'Document', gradient: 'linear-gradient(135deg, #06b6d4, #3b82f6)', path: '/documents' },
   { title: '分块审核', desc: '人工审核分块结果，支持合并、拆分、编辑与父子关系调整', icon: 'Files', gradient: 'linear-gradient(135deg, #f59e0b, #f97316)', path: '/documents' },
-  { title: '智能问答', desc: '基于 RAG 的流式问答，支持 HyDE 增强、Query 改写与引用溯源', icon: 'ChatDotRound', gradient: 'linear-gradient(135deg, #10b981, #06b6d4)', path: '/chat' },
+  { title: '智能问答', desc: '基于 RAG 的流式问答，支持 Query 改写与引用溯源', icon: 'ChatDotRound', gradient: 'linear-gradient(135deg, #10b981, #06b6d4)', path: '/chat' },
   { title: '提示词模板', desc: '灵活配置系统提示词与用户提示词，支持知识库级别定制', icon: 'EditPen', gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)', path: '/prompt-templates' }
 ]
 
@@ -97,7 +97,7 @@ const architectures = [
   { num: '01', title: '文档解析', desc: 'LlamaIndex Cloud 智能解析 PDF，Tika 解析其余格式，支持版面与表格识别' },
   { num: '02', title: '语义分块', desc: 'Markdown 语义边界父块 + 递归字符子块，父子双层索引结构' },
   { num: '03', title: '多路召回', desc: '向量检索 + 全文检索 + 模糊匹配，RRF 融合排序后 Rerank 精排' },
-  { num: '04', title: 'HyDE 增强', desc: '利用 LLM 生成假设答案增强检索，Query 改写提升多轮对话效果' }
+  { num: '04', title: 'Query 改写', desc: '利用 LLM 改写查询增强检索，多轮对话指代消解提升上下文理解效果' }
 ]
 
 onMounted(async () => {

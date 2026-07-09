@@ -2,6 +2,7 @@ package cn.kong.zbrain.llm.impl;
 
 import cn.kong.zbrain.common.BusinessException;
 import cn.kong.zbrain.entity.SysLlmModel;
+import cn.kong.zbrain.llm.LLMModelRegistry;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.SysLlmModelService;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +12,9 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -42,7 +45,7 @@ import java.util.function.Consumer;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class LLMServiceImpl implements LLMService {
+public class LLMServiceImpl implements LLMService, LLMModelRegistry {
 
     private final SysLlmModelService sysLlmModelService;
 
@@ -307,20 +310,34 @@ public class LLMServiceImpl implements LLMService {
     @Override
     public void chatStream(Long modelId, String systemPrompt, String userPrompt, List<ChatMessage> history,
                            boolean thinking, Consumer<String> onChunk) {
+        chatStream(modelId, systemPrompt, userPrompt, history, thinking, onChunk, null);
+    }
+
+    @Override
+    public void chatStream(Long modelId, String systemPrompt, String userPrompt, List<ChatMessage> history,
+                           boolean thinking, Consumer<String> onChunk, Consumer<Usage> onUsage) {
         try {
             String effectiveSystemPrompt = applyThinking(systemPrompt, thinking);
             List<Message> messages = buildMessages(effectiveSystemPrompt, history, userPrompt);
             Prompt prompt = new Prompt(messages);
-            getChatModel(modelId).stream(prompt).toIterable().forEach(chatResponse -> {
+            Usage capturedUsage = null;
+            for (ChatResponse chatResponse : getChatModel(modelId).stream(prompt).toIterable()) {
                 if (chatResponse == null || chatResponse.getResult() == null
                         || chatResponse.getResult().getOutput() == null) {
-                    return;
+                    continue;
                 }
                 String text = chatResponse.getResult().getOutput().getText();
                 if (text != null && !text.isEmpty()) {
                     onChunk.accept(text);
                 }
-            });
+                // 捕获最后一个 chunk 中的 usage（OpenAI 兼容 API 在流式末尾返回）
+                if (chatResponse.getMetadata() != null && chatResponse.getMetadata().getUsage() != null) {
+                    capturedUsage = chatResponse.getMetadata().getUsage();
+                }
+            }
+            if (onUsage != null && capturedUsage != null) {
+                onUsage.accept(capturedUsage);
+            }
         } catch (Exception e) {
             log.error("LLM 流式调用失败: modelId={}, thinking={}", modelId, thinking, e);
             throw new BusinessException("LLM 流式调用失败: " + e.getMessage(), e);

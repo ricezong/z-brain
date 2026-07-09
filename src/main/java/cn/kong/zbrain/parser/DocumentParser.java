@@ -81,7 +81,7 @@ public class DocumentParser {
      *
      * <p>管线：Tika ToHTMLContentHandler 输出 HTML → JSoup 转 Markdown。
      * 输出为标准的 Markdown（含 ## 标题、| | 表格语法），
-     * 供 {@code MarkdownSemanticChunker} 进行语义边界分块。</p>
+     * 供 {@code DefaultChunkingEngine} 进行递归字符分块。</p>
      *
      * <p>对于本身无标题层级的文档（如部分 PDF），
      * Markdown 中可能只有普通段落，此时分块引擎会自动

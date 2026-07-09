@@ -28,7 +28,7 @@
             (name, description, category, prompt_template_id, chunk_size, status, doc_count, chunk_count, create_by, update_by)
         VALUES
             (#{name}, #{description}, #{category}, #{promptTemplateId},
-             COALESCE(#{chunkSize}, 256), COALESCE(#{status}, 'active'), COALESCE(#{docCount}, 0), COALESCE(#{chunkCount}, 0),
+             COALESCE(#{chunkSize}, 300), COALESCE(#{status}, 'active'), COALESCE(#{docCount}, 0), COALESCE(#{chunkCount}, 0),
              COALESCE(#{createBy}, 'system'), COALESCE(#{updateBy}, 'system'))
     </insert>
 

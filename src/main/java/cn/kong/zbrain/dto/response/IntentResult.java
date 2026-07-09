@@ -1,4 +1,4 @@
-package cn.kong.zbrain.dto;
+package cn.kong.zbrain.dto.response;
 
 import cn.kong.zbrain.enums.ChatIntent;
 

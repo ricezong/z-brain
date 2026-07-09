@@ -68,7 +68,7 @@
             <span class="kb-stat-label">分块</span>
           </div>
           <div class="kb-stat">
-            <span class="kb-stat-value">{{ item.chunkSize || 256 }}</span>
+            <span class="kb-stat-value">{{ item.chunkSize || 300 }}</span>
             <span class="kb-stat-label">Token/块</span>
           </div>
         </div>
@@ -118,8 +118,8 @@
           <el-input v-model="form.category" placeholder="请输入分类（可选）" />
         </el-form-item>
         <el-form-item label="分块大小" prop="chunkSize">
-          <el-input-number v-model="form.chunkSize" :min="64" :max="2048" :step="32" />
-          <span class="form-tip">Token 数（最小 64）</span>
+          <el-input-number v-model="form.chunkSize" :min="64" :max="1024" :step="32" />
+          <span class="form-tip">子块 Token 数（默认 300）</span>
         </el-form-item>
         <el-form-item label="提示词模板">
           <el-select v-model="form.promptTemplateId" placeholder="选择提示词模板（可选）" clearable style="width: 100%">
@@ -173,7 +173,7 @@ const form = reactive({
   name: '',
   description: '',
   category: '',
-  chunkSize: 256,
+  chunkSize: 300,
   promptTemplateId: null,
   status: 'active'
 })
@@ -222,7 +222,7 @@ function resetFilters() {
 
 function openCreateDialog() {
   editingId.value = null
-  Object.assign(form, { name: '', description: '', category: '', chunkSize: 256, promptTemplateId: null, status: 'active' })
+  Object.assign(form, { name: '', description: '', category: '', chunkSize: 300, promptTemplateId: null, status: 'active' })
   dialogVisible.value = true
 }
 
@@ -232,7 +232,7 @@ function openEditDialog(item) {
     name: item.name,
     description: item.description || '',
     category: item.category || '',
-    chunkSize: item.chunkSize || 256,
+    chunkSize: item.chunkSize || 300,
     promptTemplateId: item.promptTemplateId,
     status: item.status || 'active'
   })

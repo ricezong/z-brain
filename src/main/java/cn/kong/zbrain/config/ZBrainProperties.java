@@ -60,14 +60,14 @@ public class ZBrainProperties {
 
     @Data
     public static class Chunk {
-        /** 父块最小 Token 数（语义边界控制下限） */
-        private int parentMinTokenSize = 512;
-        /** 父块最大 Token 数（语义边界控制上限） */
-        private int parentMaxTokenSize = 2048;
-        /** 子块 Token 大小（递归字符分块 chunk_size） */
-        private int childTokenSize = 256;
-        /** 子块 Token 重叠（约为 chunk_size 的 12.5%） */
-        private int tokenOverlap = 32;
+        /** 父块 Token 大小（父层递归字符分块 chunk_size） */
+        private int parentTokenSize = 1000;
+        /** 父块 Token 重叠（父层递归字符分块 chunk_overlap） */
+        private int parentOverlap = 150;
+        /** 子块 Token 大小（子层递归字符分块 chunk_size，约为父块的 1/3） */
+        private int childTokenSize = 300;
+        /** 子块 Token 重叠（子层递归字符分块 chunk_overlap） */
+        private int childOverlap = 40;
     }
 
     @Data
@@ -123,7 +123,5 @@ public class ZBrainProperties {
     public static class QueryPreprocess {
         /** 是否启用 Query 改写（多轮对话指代消解 + 单轮关键词扩展） */
         private boolean enableQueryRewrite = true;
-        /** 是否启用 HyDE 增强（生成假设性答案用于向量检索） */
-        private boolean enableHyde = true;
     }
 }

@@ -3,7 +3,7 @@ package cn.kong.zbrain.controller;
 import cn.kong.zbrain.common.Result;
 import cn.kong.zbrain.entity.SysLlmModel;
 import cn.kong.zbrain.entity.SysPrompt;
-import cn.kong.zbrain.llm.LLMService;
+import cn.kong.zbrain.llm.LLMModelRegistry;
 import cn.kong.zbrain.service.EmbeddingService;
 import cn.kong.zbrain.service.RerankService;
 import cn.kong.zbrain.service.SysLlmModelService;
@@ -32,7 +32,7 @@ public class SystemConfigController {
 
     private final SysPromptService sysPromptService;
     private final SysLlmModelService sysLlmModelService;
-    private final LLMService llmService;
+    private final LLMModelRegistry llmModelRegistry;
     private final EmbeddingService embeddingService;
     private final RerankService rerankService;
 
@@ -130,9 +130,9 @@ public class SystemConfigController {
     private void refreshAfterCreate(SysLlmModel model, Long id) {
         String type = model.getModelType();
         if ("chat".equals(type)) {
-            llmService.reload(id); // 从数据库读取并注册新模型
+            llmModelRegistry.reload(id); // 从数据库读取并注册新模型
             if (Boolean.TRUE.equals(model.getIsDefault())) {
-                llmService.reloadDefault();
+                llmModelRegistry.reloadDefault();
             }
         } else {
             clearCacheByType(type);
@@ -147,8 +147,8 @@ public class SystemConfigController {
     private void refreshAfterUpdate(SysLlmModel model) {
         String type = model.getModelType();
         if ("chat".equals(type)) {
-            llmService.reload(model.getId());
-            llmService.reloadDefault();
+            llmModelRegistry.reload(model.getId());
+            llmModelRegistry.reloadDefault();
         } else {
             clearCacheByType(type);
         }
@@ -162,9 +162,9 @@ public class SystemConfigController {
     private void refreshAfterDelete(SysLlmModel existing) {
         String type = existing.getModelType();
         if ("chat".equals(type)) {
-            llmService.evict(existing.getId());
+            llmModelRegistry.evict(existing.getId());
             if (Boolean.TRUE.equals(existing.getIsDefault())) {
-                llmService.reloadDefault();
+                llmModelRegistry.reloadDefault();
             }
         } else {
             clearCacheByType(type);
@@ -176,7 +176,7 @@ public class SystemConfigController {
      */
     private void refreshAfterDefaultChange(String modelType) {
         if ("chat".equals(modelType)) {
-            llmService.reloadDefault();
+            llmModelRegistry.reloadDefault();
         } else {
             clearCacheByType(modelType);
         }

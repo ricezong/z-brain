@@ -6,6 +6,7 @@ import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.dto.request.ChatRequest;
 import cn.kong.zbrain.dto.response.ChatResponse;
 import cn.kong.zbrain.dto.response.RetrievalResult;
+import cn.kong.zbrain.dto.response.ThinkingStep;
 import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.entity.Document;
 import cn.kong.zbrain.entity.PromptTemplate;
@@ -13,6 +14,7 @@ import cn.kong.zbrain.enums.ChatIntent;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.mapper.DocumentMapper;
 import cn.kong.zbrain.service.ChatEngine;
+import cn.kong.zbrain.service.ChatSessionHelper;
 import cn.kong.zbrain.service.HybridRetrievalService;
 import cn.kong.zbrain.service.PromptTemplateService;
 import cn.kong.zbrain.service.QueryPreprocessService;
@@ -20,6 +22,7 @@ import cn.kong.zbrain.service.SysPromptService;
 import cn.kong.zbrain.util.TokenUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -27,15 +30,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 知识库问答引擎（RAG）
  *
  * <p>完整 RAG 链路：</p>
  * <ol>
- *   <li>查询预处理：Query 改写、HyDE</li>
+ *   <li>查询预处理：Query 改写</li>
  *   <li>混合检索：向量/全文 + RRF 融合 + Rerank</li>
  *   <li>Token 预算控制：提取 Top 5 子块对应父块，按预算截断</li>
  *   <li>问答生成：动态 Prompt 组装，强制引用标记</li>
@@ -75,7 +80,7 @@ public class RAGEngine implements ChatEngine {
 
         ChatSession session = helper.getOrCreateSession(request);
 
-        // 1. 查询预处理（Query 改写、HyDE）
+        // 1. 查询预处理（Query 改写）
         QueryPreprocessService.PreprocessResult preprocess = queryPreprocessService.preprocess(
                 request.getQuery(), session.getId());
 
@@ -89,7 +94,6 @@ public class RAGEngine implements ChatEngine {
             resp.setSessionId(session.getId());
             resp.setQuery(request.getQuery());
             resp.setRewrittenQuery(preprocess.rewrittenQuery());
-            resp.setHydeAnswer(preprocess.hydeAnswer());
             resp.setAnswer(noResultMsg);
             resp.setCitations(new ArrayList<>());
             resp.setHitChunkIds(new ArrayList<>());
@@ -118,11 +122,11 @@ public class RAGEngine implements ChatEngine {
         response.setSessionId(session.getId());
         response.setQuery(request.getQuery());
         response.setRewrittenQuery(preprocess.rewrittenQuery());
-        response.setHydeAnswer(preprocess.hydeAnswer());
         response.setAnswer(answer);
         response.setCitations(citations);
         response.setHitChunkIds(retrievalResults.stream().map(RetrievalResult::getChunkId).toList());
         response.setCostTimeMs(System.currentTimeMillis() - startTime);
+        response.setIntent("rag");
 
         // 8. 上下文与日志沉淀
         chatContextCache.appendMessage(session.getId(), ChatContextCache.ChatMessage.user(request.getQuery()));
@@ -139,29 +143,20 @@ public class RAGEngine implements ChatEngine {
         try {
             ChatSession session = helper.getOrCreateSession(request);
 
-            // 1. 查询预处理（Query 改写、HyDE）
+            // 思考过程回调
+            Consumer<ThinkingStep> onThinking = step -> helper.sendSseEvent(emitter, "thinking", step);
+
+            // 1. 查询预处理（Query 改写）
             QueryPreprocessService.PreprocessResult preprocess = queryPreprocessService.preprocess(
-                    request.getQuery(), session.getId());
+                    request.getQuery(), session.getId(), onThinking);
 
             // 2. 混合检索
             List<RetrievalResult> retrievalResults = hybridRetrievalService.hybridRetrieve(
-                    request.getKbId(), preprocess.vectorQuery(), preprocess.textQuery());
+                    request.getKbId(), preprocess.vectorQuery(), preprocess.textQuery(), onThinking);
 
             // 3. 发送检索结果元信息
             helper.sendSseEvent(emitter, "session", session.getId());
             helper.sendSseEvent(emitter, "intent", "rag");
-            helper.sendSseEvent(emitter, "rewritten_query", preprocess.rewrittenQuery());
-            helper.sendSseEvent(emitter, "hyde", preprocess.hydeAnswer());
-            helper.sendSseEvent(emitter, "retrieval", retrievalResults.stream()
-                    .map(r -> {
-                        Map<String, Object> m = new HashMap<>();
-                        m.put("chunkId", r.getChunkId());
-                        m.put("score", r.getScore());
-                        m.put("docId", r.getDocId());
-                        m.put("citationLabel", r.getCitationLabel());
-                        return m;
-                    })
-                    .toList());
 
             if (retrievalResults.isEmpty()) {
                 String noResultMsg = getNoResultMessage();
@@ -212,8 +207,15 @@ public class RAGEngine implements ChatEngine {
                     })
                     .toList());
 
-            // 7. 流式生成
+            // 7. 发送生成开始思考步骤
+            onThinking.accept(new ThinkingStep(
+                    "generation", "生成回答",
+                    "模型: " + (request.getModelId() != null ? request.getModelId() : "默认模型"),
+                    System.currentTimeMillis()));
+
+            // 8. 流式生成
             StringBuilder fullAnswer = new StringBuilder();
+            AtomicReference<Usage> usageRef = new AtomicReference<>();
             llmService.chatStream(
                     request.getModelId(),
                     template.getSystemPrompt(),
@@ -223,9 +225,11 @@ public class RAGEngine implements ChatEngine {
                     chunk -> {
                         fullAnswer.append(chunk);
                         helper.sendSseEvent(emitter, "content", chunk);
-                    });
+                    },
+                    usage -> usageRef.set(usage)
+            );
 
-            // 8. 上下文与日志沉淀
+            // 9. 上下文与日志沉淀
             chatContextCache.appendMessage(session.getId(), ChatContextCache.ChatMessage.user(request.getQuery()));
             chatContextCache.appendMessage(session.getId(), ChatContextCache.ChatMessage.assistant(fullAnswer.toString()));
             helper.incrementMessageCount(session.getId());
@@ -235,15 +239,30 @@ public class RAGEngine implements ChatEngine {
             logResponse.setSessionId(session.getId());
             logResponse.setQuery(request.getQuery());
             logResponse.setRewrittenQuery(preprocess.rewrittenQuery());
-            logResponse.setHydeAnswer(preprocess.hydeAnswer());
             logResponse.setAnswer(fullAnswer.toString());
             logResponse.setCitations(new ArrayList<>());
             logResponse.setHitChunkIds(retrievalResults.stream().map(RetrievalResult::getChunkId).toList());
             logResponse.setCostTimeMs(System.currentTimeMillis() - startTime);
+            logResponse.setIntent("rag");
+            Usage usage = usageRef.get();
+            if (usage != null) {
+                ChatResponse.TokenMeta tu = new ChatResponse.TokenMeta();
+                tu.setPromptTokens(usage.getPromptTokens());
+                tu.setCompletionTokens(usage.getCompletionTokens());
+                tu.setTotalTokens(usage.getTotalTokens());
+                logResponse.setTokenMeta(tu);
+            }
             helper.saveLog(request, session, preprocess, logResponse, retrievalResults);
 
-            // 9. 发送完成事件
-            helper.sendSseEvent(emitter, "done", Map.of("costTimeMs", System.currentTimeMillis() - startTime));
+            // 10. 发送完成事件
+            Map<String, Object> doneData = new HashMap<>();
+            doneData.put("costTimeMs", System.currentTimeMillis() - startTime);
+            if (usage != null) {
+                doneData.put("promptTokens", usage.getPromptTokens());
+                doneData.put("completionTokens", usage.getCompletionTokens());
+                doneData.put("totalTokens", usage.getTotalTokens());
+            }
+            helper.sendSseEvent(emitter, "done", doneData);
             emitter.complete();
 
         } catch (Exception e) {

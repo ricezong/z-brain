@@ -154,7 +154,9 @@ function renderGroup(group, mdInstance) {
 /* ======================== 状态 ======================== */
 
 const blockCache = ref([])
-let debounceTimer = null
+let renderTimer = null
+let lastRenderTime = 0
+const STREAM_THROTTLE_MS = 80
 let lastProcessedKey = ''
 
 /* ======================== 核心处理 ======================== */
@@ -231,20 +233,35 @@ function processContent() {
 
 /* ======================== Watchers ======================== */
 
-// 内容变化：流式态防抖，终态立即渲染
+// 内容变化：流式态节流渲染（首次立即渲染 + trailing 尾随），终态立即渲染
 watch(() => props.content, () => {
   if (props.isStreaming) {
-    clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(processContent, 80)
+    const now = Date.now()
+    const elapsed = now - lastRenderTime
+    if (elapsed >= STREAM_THROTTLE_MS) {
+      // 距上次渲染已超过间隔，立即渲染
+      clearTimeout(renderTimer)
+      renderTimer = null
+      lastRenderTime = now
+      processContent()
+    } else if (!renderTimer) {
+      // 安排尾随渲染，确保最后一次变更不会丢失
+      renderTimer = setTimeout(() => {
+        renderTimer = null
+        lastRenderTime = Date.now()
+        processContent()
+      }, STREAM_THROTTLE_MS - elapsed)
+    }
   } else {
     processContent()
   }
 }, { immediate: true })
 
-// 流式结束：清除防抖，立即做一次严格渲染
+// 流式结束：清除定时器，立即做一次严格渲染
 watch(() => props.isStreaming, (newVal, oldVal) => {
   if (oldVal && !newVal) {
-    clearTimeout(debounceTimer)
+    clearTimeout(renderTimer)
+    renderTimer = null
     lastProcessedKey = '' // 强制重新处理（切换解析器）
     processContent()
   }
@@ -253,9 +270,10 @@ watch(() => props.isStreaming, (newVal, oldVal) => {
 // 引用数据变化：重新处理（引用占位符依赖 citations）
 watch(() => props.citations, () => {
   if (props.content) {
-    clearTimeout(debounceTimer)
+    clearTimeout(renderTimer)
+    renderTimer = null
     lastProcessedKey = '' // 强制重新处理
-    debounceTimer = setTimeout(processContent, 50)
+    renderTimer = setTimeout(processContent, 50)
   }
 })
 </script>

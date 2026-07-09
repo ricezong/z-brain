@@ -9,26 +9,25 @@
         <result column="user_id"           property="userId"/>
         <result column="query"             property="query"/>
         <result column="rewritten_query"   property="rewrittenQuery"/>
-        <result column="hyde_answer"       property="hydeAnswer"/>
         <result column="answer"            property="answer"/>
         <result column="hit_chunk_ids"     property="hitChunkIds"/>
         <result column="retrieval_info"    property="retrievalInfo"/>
-        <result column="token_usage"       property="tokenUsage"/>
+        <result column="meta"              property="meta"/>
         <result column="cost_time_ms"      property="costTimeMs"/>
         <result column="create_time"       property="createTime"/>
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, session_id, kb_id, user_id, query, rewritten_query, hyde_answer, answer,
-        hit_chunk_ids, retrieval_info, token_usage, cost_time_ms, create_time
+        id, session_id, kb_id, user_id, query, rewritten_query, answer,
+        hit_chunk_ids, retrieval_info, meta, cost_time_ms, create_time
     </sql>
 
     <insert id="insert" parameterType="cn.kong.zbrain.entity.ChatLog" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kb_chat_log
-            (session_id, kb_id, user_id, query, rewritten_query, hyde_answer, answer,
-             hit_chunk_ids, retrieval_info, token_usage, cost_time_ms)
+            (session_id, kb_id, user_id, query, rewritten_query, answer,
+             hit_chunk_ids, retrieval_info, meta, cost_time_ms)
         VALUES
-            (#{sessionId}, #{kbId}, #{userId}, #{query}, #{rewrittenQuery}, #{hydeAnswer}, #{answer},
+            (#{sessionId}, #{kbId}, #{userId}, #{query}, #{rewrittenQuery}, #{answer},
              <choose>
                  <when test="hitChunkIds != null">#{hitChunkIds}::jsonb</when>
                  <otherwise>NULL</otherwise>
@@ -38,7 +37,7 @@
                  <otherwise>NULL</otherwise>
              </choose>,
              <choose>
-                 <when test="tokenUsage != null">#{tokenUsage}::jsonb</when>
+                 <when test="meta != null">#{meta}::jsonb</when>
                  <otherwise>NULL</otherwise>
              </choose>,
              #{costTimeMs})

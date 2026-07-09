@@ -7,11 +7,8 @@ import request from './request'
  *   event:session
  *   data:session-id-string
  *
- *   event:intent
- *   data:chitchat 或 rag
- *
- *   event:rewritten_query
- *   data:rewritten-query-string
+ *   event:thinking
+ *   data:{"type":"intent","title":"意图识别","detail":"RAG · 置信度 85%","timestamp":...}
  *
  *   event:content
  *   data:text chunk
@@ -20,14 +17,14 @@ import request from './request'
  *   data:[{"label":"doc_1","chunkId":1,"docId":2}]
  *
  *   event:done
- *   data:{"costTimeMs":1234}
+ *   data:{"costTimeMs":1234,"promptTokens":100,"completionTokens":200,"intent":"rag"}
  *
  * 回调 onMessage 收到的是统一格式的对象：
  *   { type: 'session', data: 'session-id-string' }
- *   { type: 'intent', data: 'chitchat' }
+ *   { type: 'thinking', data: { type, title, detail, timestamp } }
  *   { type: 'content', data: 'text chunk' }
  *   { type: 'citations', data: [{...}] }
- *   { type: 'done', data: { costTimeMs: 1234 } }
+ *   { type: 'done', data: { costTimeMs, promptTokens, completionTokens, intent } }
  */
 export function chatStream(data, { onMessage, onDone, onError }) {
   const controller = new AbortController()

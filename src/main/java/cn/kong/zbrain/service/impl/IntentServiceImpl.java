@@ -1,7 +1,7 @@
 package cn.kong.zbrain.service.impl;
 
 import cn.kong.zbrain.cache.ChatContextCache;
-import cn.kong.zbrain.dto.IntentResult;
+import cn.kong.zbrain.dto.response.IntentResult;
 import cn.kong.zbrain.enums.ChatIntent;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.IntentService;

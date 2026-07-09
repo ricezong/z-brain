@@ -1,20 +1,21 @@
 package cn.kong.zbrain.service;
 
 import cn.kong.zbrain.cache.ChatContextCache;
+import cn.kong.zbrain.dto.response.ThinkingStep;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 查询预处理服务接口
  *
- * <p>包含两大能力：</p>
+ * <p>包含能力：</p>
  * <ol>
  *   <li>多轮对话 Query 改写：将指代不清的 Query 改写为独立完整 Query</li>
- *   <li>HyDE 增强：生成假设性答案用于检索</li>
  * </ol>
  *
  * <p>意图识别已迁移至 {@link cn.kong.zbrain.service.IntentService}。
- * HyDE 与 Query 改写均为系统级优化，由配置文件统一控制，不对用户暴露开关。</p>
+ * Query 改写为系统级优化，由配置文件统一控制，不对用户暴露开关。</p>
  *
  * @author zbrain-team
  */
@@ -42,15 +43,7 @@ public interface QueryPreprocessService {
     String rewriteQueryForApi(String query, String sessionId);
 
     /**
-     * HyDE 假设性答案生成
-     *
-     * @param query 改写后的 Query
-     * @return 假设性答案（用于向量检索）
-     */
-    String generateHyDE(String query);
-
-    /**
-     * 完整的查询预处理（系统级控制 HyDE 与 Query 改写）
+     * 完整的查询预处理（系统级控制 Query 改写）
      *
      * @param query     原始问题
      * @param sessionId 会话 ID
@@ -59,14 +52,24 @@ public interface QueryPreprocessService {
     PreprocessResult preprocess(String query, String sessionId);
 
     /**
+     * 完整的查询预处理（带思考过程回调）
+     *
+     * @param query     原始问题
+     * @param sessionId 会话 ID
+     * @param onThinking 思考过程回调（可为 null）
+     * @return 预处理结果
+     */
+    PreprocessResult preprocess(String query, String sessionId,
+                                 Consumer<ThinkingStep> onThinking);
+
+    /**
      * 预处理结果
      */
     record PreprocessResult(
             String originalQuery,
             String rewrittenQuery,
-            String hydeAnswer,
             boolean isChitchat,
-            /** 用于向量检索的文本（HyDE 答案或改写后的 Query） */
+            /** 用于向量检索的文本（改写后的 Query） */
             String vectorQuery,
             /** 用于全文检索的文本（改写后的 Query） */
             String textQuery,

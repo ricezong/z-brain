@@ -3,7 +3,6 @@ package cn.kong.zbrain.chunk.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import cn.kong.zbrain.chunk.ChunkingEngine;
-import cn.kong.zbrain.chunk.MarkdownSemanticChunker;
 import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.entity.Chunk;
 import cn.kong.zbrain.enums.ChunkStatus;
@@ -21,18 +20,18 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * 默认分块引擎实现（v3：Markdown 语义边界 + 递归字符分块）
+ * 默认分块引擎实现（v4：双层递归字符分块）
  *
- * <p>统一使用 Markdown 作为中间格式，两步分块策略：</p>
+ * <p>统一使用 {@link RecursiveCharacterSplitter} 进行两轮切分，父层粗切 + 子层细切：</p>
  * <ol>
- *   <li><b>父块切分（Markdown 语义边界）</b>：基于 Markdown ##/### 标题、
- *       |---| 表格语法进行语义切分，父块大小 512-2048 tokens。
- *       绝不跨标题/表格拆分。</li>
- *   <li><b>子块切分（递归字符分块）</b>：对每个父块独立递归字符切分，
- *       chunk_size=256 tokens，overlap=32 tokens。
- *       分隔符优先级：\n\n → \n → 。/！/？ → 空格 → 空字符串（兜底）。
- *       每个子块仅记录所属 parentId。</li>
+ *   <li><b>父层切分</b>：对全文递归字符切分，chunk_size≈1000 tokens，overlap≈150 tokens。
+ *       分隔符优先级：{@code \n\n → \n → 。→ ！→ ？→ ，→ 空格 → 强制切}。
+ *       父块保留完整语义上下文，不向量化。</li>
+ *   <li><b>子层切分</b>：对每个父块独立递归字符切分，chunk_size≈300 tokens，overlap≈40 tokens。
+ *       分隔符优先级与父层一致，仅阈值更小。子块用于精确向量检索。</li>
  * </ol>
+ *
+ * <p>两层切分器本质相同，区别仅在 chunk_size 和 chunk_overlap，子块大小约为父块的 1/3。</p>
  *
  * @author zbrain-team
  */
@@ -74,58 +73,59 @@ public class DefaultChunkingEngine implements ChunkingEngine {
 
         List<Chunk> result = new ArrayList<>();
 
-        // ──────────── 第1步：Markdown 语义边界父块切分 ────────────
-        int minTokens = properties.getChunk().getParentMinTokenSize();
-        int maxTokens = properties.getChunk().getParentMaxTokenSize();
+        // ──────────── 第1步：父层递归字符切分 ────────────
+        int parentTokenSize = properties.getChunk().getParentTokenSize();
+        int parentOverlap = properties.getChunk().getParentOverlap();
 
-        List<MarkdownSemanticChunker.ParentChunk> parents =
-                MarkdownSemanticChunker.chunkToParents(markdownText, minTokens, maxTokens);
-        if (parents.isEmpty()) {
-            log.warn("文档 docId={} Markdown 语义父块切分为空，回退到固定窗口切分", docId);
-            parents = MarkdownSemanticChunker.chunkByFixedWindow(markdownText, maxTokens);
-        }
+        List<String> parentTexts = RecursiveCharacterSplitter.split(
+                markdownText, parentTokenSize, parentOverlap);
 
-        log.info("文档 docId={} 切分为 {} 个父块", docId, parents.size());
+        log.info("文档 docId={} 父层切分为 {} 个父块 (chunk_size={}, overlap={})",
+                docId, parentTexts.size(), parentTokenSize, parentOverlap);
 
-        // ──────────── 第2步：对每个父块递归字符切分子块 ────────────
-        for (MarkdownSemanticChunker.ParentChunk pc : parents) {
+        // ──────────── 第2步：对每个父块子层递归字符切分 ────────────
+        int childOverlap = properties.getChunk().getChildOverlap();
+        int globalOffset = 0;
+
+        for (int i = 0; i < parentTexts.size(); i++) {
+            String parentText = parentTexts.get(i);
+
             // 创建父块实体
             Chunk parent = new Chunk();
             parent.setDocId(docId);
             parent.setKbId(kbId);
             parent.setChunkType(ChunkType.PARENT.getCode());
-            parent.setContent(cleanContent(pc.content));
-            parent.setTokenCount(pc.tokenCount);
+            String cleanedParent = cleanContent(parentText);
+            parent.setContent(cleanedParent);
+            parent.setTokenCount(TokenUtils.countTokens(cleanedParent));
             parent.setStatus(ChunkStatus.DRAFT.getCode());
             parent.setContentVector(null); // 父块不向量化
 
             Map<String, Object> parentMeta = new HashMap<>();
-            parentMeta.put("start_index", pc.startOffset);
-            parentMeta.put("end_index", pc.endOffset);
-            parentMeta.put("parent_index", pc.index);
-            if (pc.headingLevel != null) {
-                parentMeta.put("heading_level", pc.headingLevel);
-            }
+            parentMeta.put("parent_index", i);
+            parentMeta.put("start_index", globalOffset);
+            parentMeta.put("end_index", globalOffset + parentText.length());
             parent.setMetadata(toJson(parentMeta));
 
             result.add(parent);
 
-            // 切分子块（parentId 暂时为 null，由 Service 层插入后回填）
-            List<Chunk> children = splitToChildren(pc.content, null, docId, kbId, pc.startOffset, effectiveChildTokenSize);
+            // 子层切分（parentId 暂时为 null，由 Service 层插入后回填）
+            List<Chunk> children = splitToChildren(
+                    parentText, null, docId, kbId, globalOffset,
+                    effectiveChildTokenSize, childOverlap);
             result.addAll(children);
+
+            globalOffset += parentText.length();
         }
 
-        log.info("文档 docId={} 总计 {} 个块（父块: {}，子块: {})",
-                docId, result.size(), parents.size(), result.size() - parents.size());
+        log.info("文档 docId={} 总计 {} 个块（父块: {}，子块: {}）",
+                docId, result.size(), parentTexts.size(), result.size() - parentTexts.size());
 
         return result;
     }
 
     /**
-     * 对父块内容进行递归字符切分生成子块。
-     *
-     * <p>每个子块仅记录所属 parentId，不跨父块合并或重叠。
-     * 分隔符优先级：\n\n → \n → 。/！/？ → " "（空格）→ ""（兜底强制切）。</p>
+     * 对父块内容进行递归字符切分生成子块（使用默认 overlap）。
      *
      * @param parentContent 父块纯文本内容
      * @param parentId      父块 ID（可为 null，由 Service 层回填）
@@ -134,13 +134,12 @@ public class DefaultChunkingEngine implements ChunkingEngine {
      * @param globalOffset  父块在原文中的起始偏移
      * @return 子块列表
      */
-    @Override
     public List<Chunk> splitToChildren(String parentContent, Long parentId, Long docId, Long kbId, int globalOffset) {
-        return splitToChildren(parentContent, parentId, docId, kbId, globalOffset, null);
+        return splitToChildren(parentContent, parentId, docId, kbId, globalOffset, null, null);
     }
 
     /**
-     * 对父块内容进行递归字符切分生成子块（支持自定义子块大小）。
+     * 对父块内容进行递归字符切分生成子块（支持自定义子块大小和 overlap）。
      *
      * @param parentContent    父块纯文本内容
      * @param parentId         父块 ID（可为 null，由 Service 层回填）
@@ -148,9 +147,11 @@ public class DefaultChunkingEngine implements ChunkingEngine {
      * @param kbId             知识库 ID
      * @param globalOffset     父块在原文中的起始偏移
      * @param childTokenSize   子块 Token 大小（为 null 时使用默认配置）
+     * @param childOverlap     子块 Token 重叠（为 null 时使用默认配置）
      * @return 子块列表
      */
-    public List<Chunk> splitToChildren(String parentContent, Long parentId, Long docId, Long kbId, int globalOffset, Integer childTokenSize) {
+    public List<Chunk> splitToChildren(String parentContent, Long parentId, Long docId, Long kbId,
+                                       int globalOffset, Integer childTokenSize, Integer childOverlap) {
         List<Chunk> children = new ArrayList<>();
         if (parentContent == null || parentContent.isBlank()) {
             return children;
@@ -158,11 +159,12 @@ public class DefaultChunkingEngine implements ChunkingEngine {
 
         int effectiveChildTokenSize = (childTokenSize != null && childTokenSize > 0)
                 ? childTokenSize : properties.getChunk().getChildTokenSize();
-        int childOverlap = properties.getChunk().getTokenOverlap();
+        int effectiveOverlap = (childOverlap != null && childOverlap >= 0)
+                ? childOverlap : properties.getChunk().getChildOverlap();
 
-        // 使用递归字符分块器，采用中文优先分隔符
+        // 子层递归字符切分
         List<String> childTexts = RecursiveCharacterSplitter.split(
-                parentContent, effectiveChildTokenSize, childOverlap);
+                parentContent, effectiveChildTokenSize, effectiveOverlap);
 
         int localOffset = 0;
         for (String childText : childTexts) {
