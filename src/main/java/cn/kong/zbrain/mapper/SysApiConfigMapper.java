@@ -4,6 +4,8 @@ import cn.kong.zbrain.entity.SysApiConfig;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 /**
  * 外部 API 配置 Mapper
  *
@@ -13,6 +15,9 @@ import org.apache.ibatis.annotations.Param;
  */
 @Mapper
 public interface SysApiConfigMapper {
+
+    /** 查询全部配置 */
+    List<SysApiConfig> selectAll();
 
     /** 按配置类型查询唯一记录 */
     SysApiConfig selectByType(@Param("configType") String configType);

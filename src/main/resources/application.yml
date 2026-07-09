@@ -24,15 +24,6 @@ spring:
       max-file-size: 200MB
       max-request-size: 500MB
       file-size-threshold: 2MB
-  ai:
-    vectorstore:
-      pgvector:
-        table-name: kb_chunks
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1024
-        initialize-schema: false
-        max-document-batch-size: 20
 
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss

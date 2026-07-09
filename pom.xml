@@ -60,14 +60,14 @@
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
-        <!-- ==================== Spring AI ==================== -->
+        <!-- ==================== Spring AI（非 starter，不走自动配置） ==================== -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <artifactId>spring-ai-openai</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-tika-document-reader</artifactId>
+            <artifactId>spring-ai-client-chat</artifactId>
         </dependency>
 
         <!-- ==================== 百炼 SDK ==================== -->

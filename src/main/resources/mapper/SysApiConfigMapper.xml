@@ -15,6 +15,12 @@
         id, config_type, enabled, api_key, base_url, config
     </sql>
 
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM sys_api_config
+        ORDER BY id ASC
+    </select>
+
     <select id="selectByType" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM sys_api_config

@@ -4,7 +4,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">系统配置</h1>
-        <p class="page-subtitle">管理系统提示词、LLM 模型配置与文档解析配置</p>
+        <p class="page-subtitle">管理系统提示词、LLM 模型配置与外部 API 配置</p>
       </div>
     </div>
 
@@ -87,29 +87,37 @@
         </el-table>
       </el-tab-pane>
       <!-- ==================== 外部 API 配置 ==================== -->
-      <el-tab-pane label="文档解析配置" name="apiConfig">
-        <div v-loading="apiConfigLoading" class="api-config-section">
-          <el-form :model="apiConfigForm" label-width="140px" label-position="right" style="max-width: 680px">
-            <el-form-item label="启用 LlamaIndex">
-              <el-switch v-model="apiConfigForm.enabled" />
-              <span class="form-hint-text">启用后 PDF 文件将通过 LlamaIndex Cloud API 解析，未启用或解析失败时回退到 Tika</span>
-            </el-form-item>
-            <el-form-item label="API Key">
-              <el-input v-model="apiConfigForm.apiKey" placeholder="LlamaCloud API Key" show-password />
-            </el-form-item>
-            <el-form-item label="Base URL">
-              <el-input v-model="apiConfigForm.baseUrl" placeholder="https://api.cloud.llamaindex.ai" />
-            </el-form-item>
-            <el-form-item label="解析级别">
-              <el-select v-model="apiConfigForm.tier" style="width: 100%">
-                <el-option label="AGENTIC（高质量，支持版面/表格智能解析）" value="AGENTIC" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" round :loading="apiConfigSubmitting" @click="submitApiConfig">保存配置</el-button>
-            </el-form-item>
-          </el-form>
+      <el-tab-pane label="外部 API 配置" name="apiConfig">
+        <div class="model-header">
+          <span class="model-header-hint">管理外部服务 API 连接配置（按 configType 区分）</span>
+          <el-button type="primary" round @click="openApiConfigDialog()">
+            <el-icon><Plus /></el-icon>
+            新增配置
+          </el-button>
         </div>
+        <el-table v-loading="apiConfigLoading" :data="apiConfigList" style="width: 100%" class="model-table">
+          <el-table-column label="配置类型" prop="configType" min-width="140">
+            <template #default="{ row }">
+              <el-tag size="small" effect="plain">{{ row.configType }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="API Key" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.apiKey ? row.apiKey.substring(0, 8) + '••••••' : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="Base URL" prop="baseUrl" min-width="240" show-overflow-tooltip />
+          <el-table-column label="状态" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '启用' : '禁用' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="openApiConfigDialog(row)">编辑</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </el-tab-pane>
     </el-tabs>
 
@@ -192,6 +200,39 @@
         <el-button type="primary" :loading="modelSubmitting" @click="submitModelForm">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- ==================== API 配置编辑对话框 ==================== -->
+    <el-dialog v-model="apiConfigDialogVisible" :title="editingApiConfig ? '编辑 API 配置' : '新增 API 配置'" width="680px" destroy-on-close>
+      <el-form :model="apiConfigForm" label-width="120px" label-position="right">
+        <el-form-item label="配置类型">
+          <el-input v-if="!editingApiConfig" v-model="apiConfigForm.configType" placeholder="如：llama_index" />
+          <el-tag v-else effect="plain">{{ apiConfigForm.configType }}</el-tag>
+        </el-form-item>
+        <el-form-item label="启用状态">
+          <el-switch v-model="apiConfigForm.enabled" />
+        </el-form-item>
+        <el-form-item label="API Key">
+          <el-input v-model="apiConfigForm.apiKey" placeholder="API Key" show-password />
+        </el-form-item>
+        <el-form-item label="Base URL">
+          <el-input v-model="apiConfigForm.baseUrl" placeholder="API Base URL" />
+        </el-form-item>
+        <el-form-item label="扩展配置(JSON)">
+          <el-input
+            v-model="apiConfigForm.configJson"
+            type="textarea"
+            :rows="6"
+            placeholder='{"key": "value"}'
+            style="font-family: monospace;"
+          />
+          <div style="font-size: 12px; color: #909399; margin-top: 4px;">以 JSON 格式填写该配置类型的扩展参数</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="apiConfigDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="apiConfigSubmitting" @click="submitApiConfigForm">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -206,7 +247,7 @@ import {
   updateLlmModel,
   deleteLlmModel,
   setDefaultLlmModel,
-  getApiConfig,
+  listApiConfigs,
   updateApiConfig
 } from '@/api/system'
 import { formatDateTime } from '@/utils/format'
@@ -384,55 +425,88 @@ async function handleDeleteModel(row) {
   loadModels()
 }
 
-// ==================== 外部 API 配置（LlamaIndex） ====================
-const API_CONFIG_TYPE = 'llama_index'
+// ==================== 外部 API 配置 ====================
 const apiConfigLoading = ref(false)
+const apiConfigList = ref([])
+const apiConfigDialogVisible = ref(false)
 const apiConfigSubmitting = ref(false)
+const editingApiConfig = ref(false)
 const apiConfigForm = reactive({
+  configType: '',
   enabled: true,
   apiKey: '',
-  baseUrl: 'https://api.cloud.llamaindex.ai',
-  tier: 'AGENTIC'
+  baseUrl: '',
+  configJson: ''
 })
 
-async function loadApiConfig() {
+async function loadApiConfigs() {
   apiConfigLoading.value = true
   try {
-    const res = await getApiConfig(API_CONFIG_TYPE)
-    const data = res.data
-    if (data) {
-      // 解析 config JSON 中的 tier 字段
-      let tier = 'AGENTIC'
-      if (data.config) {
-        try {
-          const configObj = JSON.parse(data.config)
-          tier = configObj.tier || 'AGENTIC'
-        } catch { /* ignore parse error */ }
-      }
-      Object.assign(apiConfigForm, {
-        enabled: data.enabled ?? true,
-        apiKey: data.apiKey || '',
-        baseUrl: data.baseUrl || 'https://api.cloud.llamaindex.ai',
-        tier
-      })
-    }
+    const res = await listApiConfigs()
+    apiConfigList.value = res.data || []
   } finally {
     apiConfigLoading.value = false
   }
 }
 
-async function submitApiConfig() {
+function openApiConfigDialog(row) {
+  if (row) {
+    // 编辑模式
+    editingApiConfig.value = true
+    let configJson = ''
+    if (row.config) {
+      try {
+        configJson = JSON.stringify(JSON.parse(row.config), null, 2)
+      } catch {
+        configJson = row.config
+      }
+    }
+    Object.assign(apiConfigForm, {
+      configType: row.configType,
+      enabled: row.enabled ?? true,
+      apiKey: row.apiKey || '',
+      baseUrl: row.baseUrl || '',
+      configJson
+    })
+  } else {
+    // 新增模式
+    editingApiConfig.value = false
+    Object.assign(apiConfigForm, {
+      configType: '',
+      enabled: true,
+      apiKey: '',
+      baseUrl: '',
+      configJson: ''
+    })
+  }
+  apiConfigDialogVisible.value = true
+}
+
+async function submitApiConfigForm() {
   apiConfigSubmitting.value = true
   try {
-    // 将 tier 封装到 config JSON 字段
+    // 解析 configJson，允许空字符串
+    let configValue = null
+    const raw = apiConfigForm.configJson.trim()
+    if (raw) {
+      try {
+        configValue = JSON.stringify(JSON.parse(raw))
+      } catch (e) {
+        ElMessage.error('扩展配置 JSON 格式不合法')
+        apiConfigSubmitting.value = false
+        return
+      }
+    }
     const payload = {
       enabled: apiConfigForm.enabled,
       apiKey: apiConfigForm.apiKey,
       baseUrl: apiConfigForm.baseUrl,
-      config: JSON.stringify({ tier: apiConfigForm.tier })
+      config: configValue
     }
-    await updateApiConfig(API_CONFIG_TYPE, payload)
+    await updateApiConfig(apiConfigForm.configType, payload)
     ElMessage.success('保存成功')
+    apiConfigDialogVisible.value = false
+    loadApiConfigs()
   } finally {
     apiConfigSubmitting.value = false
   }
@@ -441,7 +515,7 @@ async function submitApiConfig() {
 onMounted(() => {
   loadPrompts()
   loadModels()
-  loadApiConfig()
+  loadApiConfigs()
 })
 </script>
 
@@ -533,14 +607,13 @@ onMounted(() => {
   justify-content: space-between;
   margin-bottom: 20px;
 }
+.model-header-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
 .model-table {
   border-radius: var(--radius-md);
   overflow: hidden;
-}
-
-/* ==================== LlamaIndex 配置 ==================== */
-.api-config-section {
-  padding: 8px 0;
 }
 
 /* ==================== 通用 ==================== */

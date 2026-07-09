@@ -56,6 +56,11 @@ export function setDefaultLlmModel(id) {
 
 /** ==================== 外部 API 配置 ==================== **/
 
+/** 查询所有 API 配置 */
+export function listApiConfigs() {
+  return request.get('/system/api-config')
+}
+
 /** 获取指定类型的 API 配置 */
 export function getApiConfig(configType) {
   return request.get(`/system/api-config/${configType}`)

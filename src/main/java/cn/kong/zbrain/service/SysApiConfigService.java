@@ -2,6 +2,8 @@ package cn.kong.zbrain.service;
 
 import cn.kong.zbrain.entity.SysApiConfig;
 
+import java.util.List;
+
 /**
  * 外部 API 配置服务接口
  *
@@ -11,6 +13,13 @@ import cn.kong.zbrain.entity.SysApiConfig;
  * @author zbrain-team
  */
 public interface SysApiConfigService {
+
+    /**
+     * 获取全部配置
+     *
+     * @return 配置列表
+     */
+    List<SysApiConfig> listAll();
 
     /**
      * 获取指定类型的配置

@@ -204,6 +204,12 @@ public class SystemConfigController {
 
     // ==================== 外部 API 配置 ====================
 
+    @Operation(summary = "查询所有 API 配置")
+    @GetMapping("/api-config")
+    public Result<List<SysApiConfig>> listApiConfigs() {
+        return Result.success(sysApiConfigService.listAll());
+    }
+
     @Operation(summary = "获取指定类型的 API 配置")
     @GetMapping("/api-config/{configType}")
     public Result<SysApiConfig> getApiConfig(@PathVariable String configType) {
