@@ -4,7 +4,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">系统配置</h1>
-        <p class="page-subtitle">管理系统提示词与 LLM 模型配置</p>
+        <p class="page-subtitle">管理系统提示词、LLM 模型配置与文档解析配置</p>
       </div>
     </div>
 
@@ -85,6 +85,31 @@
             </template>
           </el-table-column>
         </el-table>
+      </el-tab-pane>
+      <!-- ==================== 外部 API 配置 ==================== -->
+      <el-tab-pane label="文档解析配置" name="apiConfig">
+        <div v-loading="apiConfigLoading" class="api-config-section">
+          <el-form :model="apiConfigForm" label-width="140px" label-position="right" style="max-width: 680px">
+            <el-form-item label="启用 LlamaIndex">
+              <el-switch v-model="apiConfigForm.enabled" />
+              <span class="form-hint-text">启用后 PDF 文件将通过 LlamaIndex Cloud API 解析，未启用或解析失败时回退到 Tika</span>
+            </el-form-item>
+            <el-form-item label="API Key">
+              <el-input v-model="apiConfigForm.apiKey" placeholder="LlamaCloud API Key" show-password />
+            </el-form-item>
+            <el-form-item label="Base URL">
+              <el-input v-model="apiConfigForm.baseUrl" placeholder="https://api.cloud.llamaindex.ai" />
+            </el-form-item>
+            <el-form-item label="解析级别">
+              <el-select v-model="apiConfigForm.tier" style="width: 100%">
+                <el-option label="AGENTIC（高质量，支持版面/表格智能解析）" value="AGENTIC" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" round :loading="apiConfigSubmitting" @click="submitApiConfig">保存配置</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
       </el-tab-pane>
     </el-tabs>
 
@@ -180,7 +205,9 @@ import {
   createLlmModel,
   updateLlmModel,
   deleteLlmModel,
-  setDefaultLlmModel
+  setDefaultLlmModel,
+  getApiConfig,
+  updateApiConfig
 } from '@/api/system'
 import { formatDateTime } from '@/utils/format'
 
@@ -357,9 +384,64 @@ async function handleDeleteModel(row) {
   loadModels()
 }
 
+// ==================== 外部 API 配置（LlamaIndex） ====================
+const API_CONFIG_TYPE = 'llama_index'
+const apiConfigLoading = ref(false)
+const apiConfigSubmitting = ref(false)
+const apiConfigForm = reactive({
+  enabled: true,
+  apiKey: '',
+  baseUrl: 'https://api.cloud.llamaindex.ai',
+  tier: 'AGENTIC'
+})
+
+async function loadApiConfig() {
+  apiConfigLoading.value = true
+  try {
+    const res = await getApiConfig(API_CONFIG_TYPE)
+    const data = res.data
+    if (data) {
+      // 解析 config JSON 中的 tier 字段
+      let tier = 'AGENTIC'
+      if (data.config) {
+        try {
+          const configObj = JSON.parse(data.config)
+          tier = configObj.tier || 'AGENTIC'
+        } catch { /* ignore parse error */ }
+      }
+      Object.assign(apiConfigForm, {
+        enabled: data.enabled ?? true,
+        apiKey: data.apiKey || '',
+        baseUrl: data.baseUrl || 'https://api.cloud.llamaindex.ai',
+        tier
+      })
+    }
+  } finally {
+    apiConfigLoading.value = false
+  }
+}
+
+async function submitApiConfig() {
+  apiConfigSubmitting.value = true
+  try {
+    // 将 tier 封装到 config JSON 字段
+    const payload = {
+      enabled: apiConfigForm.enabled,
+      apiKey: apiConfigForm.apiKey,
+      baseUrl: apiConfigForm.baseUrl,
+      config: JSON.stringify({ tier: apiConfigForm.tier })
+    }
+    await updateApiConfig(API_CONFIG_TYPE, payload)
+    ElMessage.success('保存成功')
+  } finally {
+    apiConfigSubmitting.value = false
+  }
+}
+
 onMounted(() => {
   loadPrompts()
   loadModels()
+  loadApiConfig()
 })
 </script>
 
@@ -454,6 +536,11 @@ onMounted(() => {
 .model-table {
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+/* ==================== LlamaIndex 配置 ==================== */
+.api-config-section {
+  padding: 8px 0;
 }
 
 /* ==================== 通用 ==================== */

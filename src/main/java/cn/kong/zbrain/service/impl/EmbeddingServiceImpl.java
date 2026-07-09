@@ -5,6 +5,7 @@ import cn.kong.zbrain.cache.EmbeddingCache;
 import cn.kong.zbrain.common.BusinessException;
 import cn.kong.zbrain.config.DashScopeConfig;
 import cn.kong.zbrain.entity.SysLlmModel;
+import cn.kong.zbrain.enums.ModelType;
 import cn.kong.zbrain.service.EmbeddingService;
 import cn.kong.zbrain.service.SysLlmModelService;
 import lombok.RequiredArgsConstructor;
@@ -58,7 +59,7 @@ public class EmbeddingServiceImpl implements EmbeddingService {
             if (cachedEmbeddingModel != null) {
                 return cachedEmbeddingModel;
             }
-            SysLlmModel model = sysLlmModelService.getDefaultByType("embedding");
+            SysLlmModel model = sysLlmModelService.getDefaultByType(ModelType.EMBEDDING.getCode());
             if (model == null) {
                 throw new BusinessException("未找到默认的 embedding 模型配置，请在系统配置中添加");
             }

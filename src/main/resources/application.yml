@@ -25,13 +25,6 @@ spring:
       max-request-size: 500MB
       file-size-threshold: 2MB
   ai:
-    openai:
-      api-key: sk-21c649228465f38320875d31
-      base-url: https://api.deepseek.com
-      chat:
-        options:
-          model: deepseek-v4-pro
-          temperature: 0.3
     vectorstore:
       pgvector:
         table-name: kb_chunks
@@ -49,14 +42,14 @@ spring:
 # ==================== MyBatis 配置 ====================
 mybatis:
   mapper-locations: classpath:mapper/*.xml
-  type-aliases-package: com.zbrain.entity
+  type-aliases-package: cn.kong.zbrain.entity
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: true
     lazy-loading-enabled: true
     aggressive-lazy-loading: false
     default-statement-timeout: 30
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 # ==================== Z-Brain 业务配置 ====================
 zbrain:
@@ -66,20 +59,23 @@ zbrain:
     parsed-dir: ./data/parsed
     # 允许的文件类型
     allowed-types: pdf,doc,docx,ppt,pptx,txt,md,html,xls,xlsx
-  # 分块策略
+  # 分块策略（双层递归字符分块，父层粗切 + 子层细切）
   chunk:
+    # 父层切分器（保留完整语义上下文）
     parent-token-size: 1000
-    child-token-size: 200
-    token-overlap: 50
+    parent-overlap: 150
+    # 子层切分器（用于精确向量检索，约为父块的 1/3）
+    child-token-size: 300
+    child-overlap: 40
   # 检索相关
   retrieval:
     vector-top-k: 20
     fulltext-top-k: 20
-    fuzzy-top-k: 10
     rrf-k: 60
     rerank-top-n: 5
-    # 模糊匹配相似度阈值
-    fuzzy-threshold: 0.3
+  # 查询预处理（系统级控制，不对用户暴露）
+  query-preprocess:
+    enable-query-rewrite: true
   # LLM 上下文预算
   llm:
     context-token-budget: 8000
@@ -92,12 +88,8 @@ zbrain:
     doc-progress-ttl: 86400       # 1 天
     chat-context-ttl: 7200        # 2 小时
     embedding-ttl: 604800         # 7 天
-  # 百炼 SDK 配置
+  # 百炼 SDK 运维参数
   dashscope:
-    base-url: https://llm-zpa4xzq09gstj9xb.cn-beijing.maas.aliyuncs.com/api/v1
-    api-key: sk-ws-H.RYHDILP.oVEN.MCvpLHQIgQo7tH-VvR9DdoC3zYA3XnXrG5tMHB9sUnjCloROo-UA
-    embedding-model: text-embedding-v4
-    rerank-model: qwen3-rerank
     # 批量向量化每批最大条数（百炼 API 限制最多 10 条）
     embedding-batch-size: 10
     # 超时（毫秒）
@@ -110,9 +102,10 @@ zbrain:
 logging:
   level:
     root: INFO
-    com.zbrain: DEBUG
+    cn.kong.zbrain: DEBUG
+    cn.kong.zbrain.mapper: INFO
     org.springframework.web: INFO
-    org.mybatis: DEBUG
+    org.mybatis: INFO
   file:
     name: ./logs/z-brain.log
     max-size: 100MB

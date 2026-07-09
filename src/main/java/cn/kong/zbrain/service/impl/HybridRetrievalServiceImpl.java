@@ -4,6 +4,7 @@ import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.dto.response.RetrievalResult;
 import cn.kong.zbrain.dto.response.ThinkingStep;
 import cn.kong.zbrain.entity.Chunk;
+import cn.kong.zbrain.enums.ThinkingStepType;
 import cn.kong.zbrain.mapper.ChunkMapper;
 import cn.kong.zbrain.retrieval.FullTextRetriever;
 import cn.kong.zbrain.retrieval.RRFFusion;
@@ -81,14 +82,14 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
         log.debug("两路并行召回完成: vector={}, fulltext={}",
                 vectorResults.size(), fulltextResults.size());
 
-        emitThinking(onThinking, "vector_retrieval", "向量检索", "命中 " + vectorResults.size() + " 条");
-        emitThinking(onThinking, "fulltext_retrieval", "全文检索", "命中 " + fulltextResults.size() + " 条");
+        emitThinking(onThinking, ThinkingStepType.VECTOR_RETRIEVAL.getCode(), "向量检索", "命中 " + vectorResults.size() + " 条");
+        emitThinking(onThinking, ThinkingStepType.FULLTEXT_RETRIEVAL.getCode(), "全文检索", "命中 " + fulltextResults.size() + " 条");
 
         // 2. RRF 融合
         List<List<RetrievalResult>> allResults = List.of(vectorResults, fulltextResults);
         List<RetrievalResult> fused = rrfFusion.fuse(allResults, config.getRrfK(), 10);
 
-        emitThinking(onThinking, "rrf_fusion", "RRF 融合",
+        emitThinking(onThinking, ThinkingStepType.RRF_FUSION.getCode(), "RRF 融合",
                 "输入 " + allResults.size() + " 路 · 输出 " + fused.size() + " 条");
 
         if (fused.isEmpty()) {
@@ -96,7 +97,7 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
             lastInfo.set(new RetrievalInfo(
                     vectorResults.size(), fulltextResults.size(),
                     0, 0, false, new ArrayList<>()));
-            emitThinking(onThinking, "retrieval_complete", "检索完成",
+            emitThinking(onThinking, ThinkingStepType.RETRIEVAL_COMPLETE.getCode(), "检索完成",
                     "耗时 " + (System.currentTimeMillis() - start) + "ms · 最终命中 0 条");
             return new ArrayList<>();
         }
@@ -117,7 +118,7 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
 
         long elapsed = System.currentTimeMillis() - start;
         log.info("混合检索完成: kbId={}, 耗时={}ms, 最终命中={}", kbId, elapsed, finalResults.size());
-        emitThinking(onThinking, "retrieval_complete", "检索完成",
+        emitThinking(onThinking, ThinkingStepType.RETRIEVAL_COMPLETE.getCode(), "检索完成",
                 "耗时 " + elapsed + "ms · 最终命中 " + finalResults.size() + " 条");
         return finalResults;
     }
@@ -145,14 +146,14 @@ public class HybridRetrievalServiceImpl implements HybridRetrievalService {
                 result.add(item);
             }
             log.info("Rerank 完成: 返回 {} 个结果", result.size());
-            emitThinking(onThinking, "rerank", "重排序",
+            emitThinking(onThinking, ThinkingStepType.RERANK.getCode(), "重排序",
                     "候选 " + documents.size() + " → 返回 " + result.size() + " 条");
             return result;
         } catch (Exception e) {
             // 降级策略：Rerank 失败则使用 RRF 融合后的排序结果
             log.warn("Rerank 调用失败，降级使用 RRF 融合结果: {}", e.getMessage());
             int limit = Math.min(topN, fused.size());
-            emitThinking(onThinking, "rerank", "重排序",
+            emitThinking(onThinking, ThinkingStepType.RERANK.getCode(), "重排序",
                     "降级 RRF · 候选 " + fused.size() + " → 返回 " + limit + " 条");
             return new ArrayList<>(fused.subList(0, limit));
         }

@@ -4,6 +4,7 @@ import com.alibaba.dashscope.rerank.TextReRank;
 import cn.kong.zbrain.common.BusinessException;
 import cn.kong.zbrain.config.DashScopeConfig;
 import cn.kong.zbrain.entity.SysLlmModel;
+import cn.kong.zbrain.enums.ModelType;
 import cn.kong.zbrain.service.RerankService;
 import cn.kong.zbrain.service.SysLlmModelService;
 import com.alibaba.dashscope.rerank.TextReRankOutput;
@@ -52,7 +53,7 @@ public class RerankServiceImpl implements RerankService {
             if (cachedRerankModel != null) {
                 return cachedRerankModel;
             }
-            SysLlmModel model = sysLlmModelService.getDefaultByType("rerank");
+            SysLlmModel model = sysLlmModelService.getDefaultByType(ModelType.RERANK.getCode());
             if (model == null) {
                 throw new BusinessException("未找到默认的 rerank 模型配置，请在系统配置中添加");
             }

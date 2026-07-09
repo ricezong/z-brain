@@ -8,6 +8,8 @@ import cn.kong.zbrain.dto.response.ThinkingStep;
 import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.enums.ChatIntent;
 import cn.kong.zbrain.enums.ChatMode;
+import cn.kong.zbrain.enums.SseEventType;
+import cn.kong.zbrain.enums.ThinkingStepType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -76,7 +78,7 @@ public class IntentRouter {
             log.warn("未找到 {} 意图对应的引擎，降级为 RAG", effectiveIntent);
             engine = engineMap.get(ChatIntent.RAG);
             if (engine == null) {
-                helper.sendSseEvent(emitter, "error", "无可用对话引擎");
+                helper.sendSseEvent(emitter, SseEventType.ERROR.getCode(), "无可用对话引擎");
                 emitter.complete();
                 return;
             }
@@ -86,8 +88,8 @@ public class IntentRouter {
         request.setSessionId(session.getId());
 
         // 5. 发送意图识别思考步骤
-        helper.sendSseEvent(emitter, "thinking", new ThinkingStep(
-                "intent", "意图识别",
+        helper.sendSseEvent(emitter, SseEventType.THINKING.getCode(), new ThinkingStep(
+                ThinkingStepType.INTENT.getCode(), "意图识别",
                 effectiveIntent + " · 置信度 " + (int)(intentResult.confidence() * 100) + "%",
                 System.currentTimeMillis()));
 

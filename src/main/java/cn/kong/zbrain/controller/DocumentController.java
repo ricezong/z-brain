@@ -31,8 +31,9 @@ public class DocumentController {
             @RequestParam("kbId") Long kbId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "userId", required = false) String userId,
-            @RequestParam(value = "chunkSize", required = false) Integer chunkSize) {
-        Long docId = documentService.upload(kbId, file, userId, chunkSize);
+            @RequestParam(value = "chunkSize", required = false) Integer chunkSize,
+            @RequestParam(value = "parseType", required = false, defaultValue = "tika") String parseType) {
+        Long docId = documentService.upload(kbId, file, userId, chunkSize, parseType);
         documentService.parseAsync(docId);
         return Result.success(docId);
     }

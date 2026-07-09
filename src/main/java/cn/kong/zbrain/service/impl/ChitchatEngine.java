@@ -5,6 +5,8 @@ import cn.kong.zbrain.dto.request.ChatRequest;
 import cn.kong.zbrain.dto.response.ChatResponse;
 import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.enums.ChatIntent;
+import cn.kong.zbrain.enums.PromptKey;
+import cn.kong.zbrain.enums.SseEventType;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.ChatEngine;
 import cn.kong.zbrain.service.ChatSessionHelper;
@@ -82,8 +84,8 @@ public class ChitchatEngine implements ChatEngine {
             List<ChatContextCache.ChatMessage> history =
                     chatContextCache.getRecentMessages(session.getId(), HISTORY_ROUNDS);
 
-            helper.sendSseEvent(emitter, "session", session.getId());
-            helper.sendSseEvent(emitter, "intent", "chitchat");
+            helper.sendSseEvent(emitter, SseEventType.SESSION.getCode(), session.getId());
+            helper.sendSseEvent(emitter, SseEventType.INTENT.getCode(), "chitchat");
 
             String chitchatPrompt = getChitchatPrompt();
             StringBuilder fullAnswer = new StringBuilder();
@@ -96,7 +98,7 @@ public class ChitchatEngine implements ChatEngine {
                     Boolean.TRUE.equals(request.getThinking()),
                     chunk -> {
                         fullAnswer.append(chunk);
-                        helper.sendSseEvent(emitter, "content", chunk);
+                        helper.sendSseEvent(emitter, SseEventType.CONTENT.getCode(), chunk);
                     },
                     usage -> usageRef.set(usage)
             );
@@ -125,18 +127,18 @@ public class ChitchatEngine implements ChatEngine {
             }
             helper.saveLog(request, session, null, logResponse, new ArrayList<>());
 
-            helper.sendSseEvent(emitter, "done", buildDoneData(startTime, usageRef.get()));
+            helper.sendSseEvent(emitter, SseEventType.DONE.getCode(), buildDoneData(startTime, usageRef.get()));
             emitter.complete();
 
         } catch (Exception e) {
             log.error("闲聊引擎流式失败", e);
-            helper.sendSseEvent(emitter, "error", e.getMessage());
+            helper.sendSseEvent(emitter, SseEventType.ERROR.getCode(), e.getMessage());
             emitter.complete();
         }
     }
 
     private String getChitchatPrompt() {
-        String chitchatPrompt = sysPromptService.getContent("chitchat");
+        String chitchatPrompt = sysPromptService.getContent(PromptKey.CHITCHAT.getCode());
         if (chitchatPrompt == null) {
             chitchatPrompt = "你是智多星知识库助手，请友好地回答用户问题。回答使用 Markdown 格式输出。";
         }

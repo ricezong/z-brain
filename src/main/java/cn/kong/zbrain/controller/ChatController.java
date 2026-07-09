@@ -8,6 +8,7 @@ import cn.kong.zbrain.dto.response.RewriteResponse;
 import cn.kong.zbrain.entity.ChatLog;
 import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.entity.SysLlmModel;
+import cn.kong.zbrain.enums.ModelType;
 import cn.kong.zbrain.service.ChatSessionHelper;
 import cn.kong.zbrain.service.QueryPreprocessService;
 import cn.kong.zbrain.service.SysLlmModelService;
@@ -58,7 +59,7 @@ public class ChatController {
         ));
 
         // 可用模型列表（仅活跃的 chat 模型）
-        List<SysLlmModel> allModels = sysLlmModelService.listByType("chat");
+        List<SysLlmModel> allModels = sysLlmModelService.listByType(ModelType.CHAT.getCode());
         Long defaultModelId = null;
         List<ChatConfigResponse.ModelOption> modelOptions = new java.util.ArrayList<>();
         for (SysLlmModel m : allModels) {

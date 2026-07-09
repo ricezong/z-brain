@@ -1,11 +1,14 @@
 package cn.kong.zbrain.controller;
 
 import cn.kong.zbrain.common.Result;
+import cn.kong.zbrain.entity.SysApiConfig;
 import cn.kong.zbrain.entity.SysLlmModel;
 import cn.kong.zbrain.entity.SysPrompt;
+import cn.kong.zbrain.enums.ModelType;
 import cn.kong.zbrain.llm.LLMModelRegistry;
 import cn.kong.zbrain.service.EmbeddingService;
 import cn.kong.zbrain.service.RerankService;
+import cn.kong.zbrain.service.SysApiConfigService;
 import cn.kong.zbrain.service.SysLlmModelService;
 import cn.kong.zbrain.service.SysPromptService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,6 +38,7 @@ public class SystemConfigController {
     private final LLMModelRegistry llmModelRegistry;
     private final EmbeddingService embeddingService;
     private final RerankService rerankService;
+    private final SysApiConfigService sysApiConfigService;
 
     // ==================== 系统提示词 ====================
 
@@ -129,7 +133,7 @@ public class SystemConfigController {
      */
     private void refreshAfterCreate(SysLlmModel model, Long id) {
         String type = model.getModelType();
-        if ("chat".equals(type)) {
+        if (ModelType.CHAT.getCode().equals(type)) {
             llmModelRegistry.reload(id); // 从数据库读取并注册新模型
             if (Boolean.TRUE.equals(model.getIsDefault())) {
                 llmModelRegistry.reloadDefault();
@@ -146,7 +150,7 @@ public class SystemConfigController {
      */
     private void refreshAfterUpdate(SysLlmModel model) {
         String type = model.getModelType();
-        if ("chat".equals(type)) {
+        if (ModelType.CHAT.getCode().equals(type)) {
             llmModelRegistry.reload(model.getId());
             llmModelRegistry.reloadDefault();
         } else {
@@ -161,7 +165,7 @@ public class SystemConfigController {
      */
     private void refreshAfterDelete(SysLlmModel existing) {
         String type = existing.getModelType();
-        if ("chat".equals(type)) {
+        if (ModelType.CHAT.getCode().equals(type)) {
             llmModelRegistry.evict(existing.getId());
             if (Boolean.TRUE.equals(existing.getIsDefault())) {
                 llmModelRegistry.reloadDefault();
@@ -175,7 +179,7 @@ public class SystemConfigController {
      * 默认模型变更后的热更新
      */
     private void refreshAfterDefaultChange(String modelType) {
-        if ("chat".equals(modelType)) {
+        if (ModelType.CHAT.getCode().equals(modelType)) {
             llmModelRegistry.reloadDefault();
         } else {
             clearCacheByType(modelType);
@@ -196,5 +200,20 @@ public class SystemConfigController {
             case "rerank" -> rerankService.clearCache();
             default -> { /* 未知类型，忽略 */ }
         }
+    }
+
+    // ==================== 外部 API 配置 ====================
+
+    @Operation(summary = "获取指定类型的 API 配置")
+    @GetMapping("/api-config/{configType}")
+    public Result<SysApiConfig> getApiConfig(@PathVariable String configType) {
+        return Result.success(sysApiConfigService.getConfig(configType));
+    }
+
+    @Operation(summary = "更新指定类型的 API 配置")
+    @PutMapping("/api-config/{configType}")
+    public Result<Void> updateApiConfig(@PathVariable String configType, @RequestBody SysApiConfig config) {
+        sysApiConfigService.updateConfig(configType, config);
+        return Result.success();
     }
 }

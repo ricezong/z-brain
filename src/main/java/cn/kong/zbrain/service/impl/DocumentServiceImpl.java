@@ -14,16 +14,16 @@ import cn.kong.zbrain.entity.Document;
 import cn.kong.zbrain.entity.KnowledgeBase;
 import cn.kong.zbrain.enums.DocumentStatus;
 import cn.kong.zbrain.enums.ChunkStatus;
+import cn.kong.zbrain.enums.ParseType;
 import cn.kong.zbrain.mapper.ChunkMapper;
 import cn.kong.zbrain.mapper.DocumentMapper;
 import cn.kong.zbrain.mapper.KnowledgeBaseMapper;
 import cn.kong.zbrain.parser.DocumentParser;
-import cn.kong.zbrain.parser.LlamaIndexPdfParser;
+import cn.kong.zbrain.parser.LlamaIndexParser;
 import cn.kong.zbrain.service.DocumentService;
 import cn.kong.zbrain.service.EmbeddingTaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,11 +63,11 @@ public class DocumentServiceImpl implements DocumentService {
     private final ZBrainProperties properties;
     private final ObjectMapper objectMapper;
     private final EmbeddingTaskService embeddingTaskService;
-    private final ObjectProvider<LlamaIndexPdfParser> llamaIndexPdfParserProvider;
+    private final LlamaIndexParser llamaIndexParser;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long upload(Long kbId, MultipartFile file, String userId, Integer chunkSize) {
+    public Long upload(Long kbId, MultipartFile file, String userId, Integer chunkSize, String parseType) {
         // 1. 校验知识库
         KnowledgeBase kb = knowledgeBaseMapper.selectById(kbId);
         if (kb == null) {
@@ -108,6 +108,8 @@ public class DocumentServiceImpl implements DocumentService {
         document.setFileHash(fileHash);
         // 分块大小：文档未设置则使用知识库的分块大小
         document.setChunkSize(chunkSize != null ? chunkSize : kb.getChunkSize());
+        // 解析方式：默认 tika
+        document.setParseType(parseType != null ? parseType : ParseType.TIKA.getCode());
         document.setStatus(DocumentStatus.PENDING.getCode());
         document.setChunkCount(0);
         document.setParseProgress(0);
@@ -341,9 +343,9 @@ public class DocumentServiceImpl implements DocumentService {
      *
      * <p>路由策略：
      * <ul>
-     *   <li>PDF + LlamaIndex 已启用 → LlamaIndex Cloud Parsing（原生 Markdown）</li>
+     *   <li>parse_type=llama_index 且 LlamaIndex 已启用 → LlamaIndex Cloud Parsing（原生 Markdown）</li>
      *   <li>LlamaIndex 失败 → 回退到 Tika HTML → JSoup → Markdown</li>
-     *   <li>其余格式 → Tika HTML 解析 + JSoup 转 Markdown</li>
+     *   <li>parse_type=tika（默认） → Tika HTML 解析 + JSoup 转 Markdown</li>
      * </ul>
      *
      * @param document 文档实体
@@ -351,13 +353,11 @@ public class DocumentServiceImpl implements DocumentService {
      * @return Markdown 格式文本（含 ## 标题、| | 表格）
      */
     private String parseDocumentToMarkdown(Document document, File file) {
-        String fileType = document.getFileType();
-        boolean isPdf = "pdf".equalsIgnoreCase(fileType);
+        String parseType = document.getParseType();
 
-        // PDF 且 LlamaIndex 已启用 → LlamaIndex（原生 Markdown），失败回退
-        LlamaIndexPdfParser llamaIndexParser = llamaIndexPdfParserProvider.getIfAvailable();
-        if (isPdf && llamaIndexParser != null) {
-            log.info("使用 LlamaIndex 解析 PDF (Markdown): docId={}", document.getId());
+        // 用户选择 LlamaIndex 且已启用 → LlamaIndex（原生 Markdown），失败回退
+        if (ParseType.LLAMA_INDEX.getCode().equalsIgnoreCase(parseType) && llamaIndexParser.isEnabled()) {
+            log.info("使用 LlamaIndex 解析文档 (Markdown): docId={}, fileType={}", document.getId(), document.getFileType());
             try {
                 byte[] fileBytes = Files.readAllBytes(file.toPath());
                 return llamaIndexParser.parse(fileBytes, document.getFileName());
@@ -367,7 +367,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         // Tika HTML → JSoup → Markdown（统一归一化管线）
-        log.info("使用 Tika→Markdown 解析文档: docId={}, fileType={}", document.getId(), fileType);
+        log.info("使用 Tika→Markdown 解析文档: docId={}, fileType={}", document.getId(), document.getFileType());
         try (FileInputStream fis = new FileInputStream(file)) {
             return documentParser.parseToMarkdown(fis);
         } catch (Exception e) {

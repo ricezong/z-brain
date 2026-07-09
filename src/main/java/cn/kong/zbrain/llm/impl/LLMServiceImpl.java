@@ -2,6 +2,8 @@ package cn.kong.zbrain.llm.impl;
 
 import cn.kong.zbrain.common.BusinessException;
 import cn.kong.zbrain.entity.SysLlmModel;
+import cn.kong.zbrain.enums.ChatRole;
+import cn.kong.zbrain.enums.ModelType;
 import cn.kong.zbrain.llm.LLMModelRegistry;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.SysLlmModelService;
@@ -70,7 +72,7 @@ public class LLMServiceImpl implements LLMService, LLMModelRegistry {
     public void preload() {
         log.info("[模型预加载] 开始从数据库加载 chat 模型配置...");
         try {
-            List<SysLlmModel> models = sysLlmModelService.listByType("chat");
+            List<SysLlmModel> models = sysLlmModelService.listByType(ModelType.CHAT.getCode());
             int activeCount = 0;
             for (SysLlmModel m : models) {
                 if (Boolean.TRUE.equals(m.getIsActive())) {
@@ -79,7 +81,7 @@ public class LLMServiceImpl implements LLMService, LLMModelRegistry {
                 }
             }
             // 解析默认模型指针
-            SysLlmModel def = sysLlmModelService.getDefaultByType("chat");
+            SysLlmModel def = sysLlmModelService.getDefaultByType(ModelType.CHAT.getCode());
             defaultChatModelId = def != null ? def.getId() : null;
             log.info("[模型预加载] 完成：共 {} 个 chat 模型，活跃已注册 {} 个，默认模型 id={}",
                     models.size(), activeCount, defaultChatModelId);
@@ -90,7 +92,7 @@ public class LLMServiceImpl implements LLMService, LLMModelRegistry {
 
     @Override
     public void register(SysLlmModel modelConfig) {
-        if (modelConfig == null || !"chat".equals(modelConfig.getModelType())) {
+        if (modelConfig == null || !ModelType.CHAT.getCode().equals(modelConfig.getModelType())) {
             return;
         }
         // 非活跃模型不进入缓存，并清理可能存在的旧缓存
@@ -130,7 +132,7 @@ public class LLMServiceImpl implements LLMService, LLMModelRegistry {
     public void reloadDefault() {
         defaultChatModelId = null;
         try {
-            SysLlmModel def = sysLlmModelService.getDefaultByType("chat");
+            SysLlmModel def = sysLlmModelService.getDefaultByType(ModelType.CHAT.getCode());
             if (def == null) {
                 log.warn("未找到默认 chat 模型配置，默认模型指针已清空");
                 return;
@@ -230,7 +232,7 @@ public class LLMServiceImpl implements LLMService, LLMModelRegistry {
         if (defaultChatModelId != null) {
             return defaultChatModelId;
         }
-        SysLlmModel def = sysLlmModelService.getDefaultByType("chat");
+        SysLlmModel def = sysLlmModelService.getDefaultByType(ModelType.CHAT.getCode());
         if (def == null) {
             throw new BusinessException("未找到默认的 chat 模型配置，请在系统配置中添加");
         }
@@ -252,10 +254,10 @@ public class LLMServiceImpl implements LLMService, LLMModelRegistry {
                 return sysLlmModelService.getById(modelId);
             } catch (Exception e) {
                 log.warn("按 ID 查询模型配置失败: {}, 降级为默认模型", modelId);
-                return sysLlmModelService.getDefaultByType("chat");
+                return sysLlmModelService.getDefaultByType(ModelType.CHAT.getCode());
             }
         }
-        return sysLlmModelService.getDefaultByType("chat");
+        return sysLlmModelService.getDefaultByType(ModelType.CHAT.getCode());
     }
 
     private ChatClient getChatClient(Long modelId) {
@@ -366,9 +368,9 @@ public class LLMServiceImpl implements LLMService, LLMModelRegistry {
         messages.add(new SystemMessage(systemPrompt));
         if (history != null) {
             for (ChatMessage msg : history) {
-                if ("user".equals(msg.role())) {
+                if (ChatRole.USER.getCode().equals(msg.role())) {
                     messages.add(new UserMessage(msg.content()));
-                } else if ("assistant".equals(msg.role())) {
+                } else if (ChatRole.ASSISTANT.getCode().equals(msg.role())) {
                     messages.add(new AssistantMessage(msg.content()));
                 }
             }

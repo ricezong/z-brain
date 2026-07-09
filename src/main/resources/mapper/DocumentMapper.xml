@@ -11,6 +11,7 @@
         <result column="file_type"       property="fileType"/>
         <result column="file_hash"       property="fileHash"/>
         <result column="chunk_size"      property="chunkSize"/>
+        <result column="parse_type"      property="parseType"/>
         <result column="status"          property="status"/>
         <result column="chunk_count"     property="chunkCount"/>
         <result column="parse_progress"  property="parseProgress"/>
@@ -22,17 +23,17 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, kb_id, file_name, file_path, file_size, file_type, file_hash, chunk_size, status,
+        id, kb_id, file_name, file_path, file_size, file_type, file_hash, chunk_size, parse_type, status,
         chunk_count, parse_progress, error_message, metadata, create_by, create_time, update_time
     </sql>
 
     <insert id="insert" parameterType="cn.kong.zbrain.entity.Document" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kb_document
-            (kb_id, file_name, file_path, file_size, file_type, file_hash, chunk_size, status,
+            (kb_id, file_name, file_path, file_size, file_type, file_hash, chunk_size, parse_type, status,
              chunk_count, parse_progress, error_message, metadata, create_by)
         VALUES
             (#{kbId}, #{fileName}, #{filePath}, #{fileSize}, #{fileType}, #{fileHash},
-             #{chunkSize},
+             #{chunkSize}, #{parseType},
              COALESCE(#{status}, 'pending'), COALESCE(#{chunkCount}, 0),
              COALESCE(#{parseProgress}, 0), #{errorMessage}, #{metadata}::jsonb,
              COALESCE(#{createBy}, 'system'))
@@ -47,6 +48,7 @@
             <if test="fileType != null">file_type = #{fileType},</if>
             <if test="fileHash != null">file_hash = #{fileHash},</if>
             <if test="chunkSize != null">chunk_size = #{chunkSize},</if>
+            <if test="parseType != null">parse_type = #{parseType},</if>
             <if test="status != null">status = #{status},</if>
             <if test="chunkCount != null">chunk_count = #{chunkCount},</if>
             <if test="parseProgress != null">parse_progress = #{parseProgress},</if>

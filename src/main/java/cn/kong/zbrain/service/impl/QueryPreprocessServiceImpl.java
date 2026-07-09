@@ -3,6 +3,8 @@ package cn.kong.zbrain.service.impl;
 import cn.kong.zbrain.cache.ChatContextCache;
 import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.dto.response.ThinkingStep;
+import cn.kong.zbrain.enums.PromptKey;
+import cn.kong.zbrain.enums.ThinkingStepType;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.QueryPreprocessService;
 import cn.kong.zbrain.service.SysPromptService;
@@ -51,7 +53,7 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
             }
 
             // 从数据库读取提示词模板
-            String promptTemplate = sysPromptService.getContent("query_rewrite");
+            String promptTemplate = sysPromptService.getContent(PromptKey.QUERY_REWRITE.getCode());
             if (promptTemplate == null) {
                 log.warn("query_rewrite 提示词未配置，使用原始查询");
                 return query;
@@ -78,7 +80,7 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
     private String extractKeywords(String query) {
         try {
             // 从数据库读取提示词模板
-            String promptTemplate = sysPromptService.getContent("keyword_extract");
+            String promptTemplate = sysPromptService.getContent(PromptKey.KEYWORD_EXTRACT.getCode());
             if (promptTemplate == null) {
                 log.warn("keyword_extract 提示词未配置，使用原始查询");
                 return query;
@@ -111,7 +113,7 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
                 historyText.append(msg.role()).append(": ").append(msg.content()).append("\n");
             }
 
-            String promptTemplate = sysPromptService.getContent("query_rewrite");
+            String promptTemplate = sysPromptService.getContent(PromptKey.QUERY_REWRITE.getCode());
             if (promptTemplate == null) {
                 log.warn("query_rewrite 提示词未配置，使用原始查询");
                 return query;
@@ -153,7 +155,7 @@ public class QueryPreprocessServiceImpl implements QueryPreprocessService {
 
         if (onThinking != null) {
             onThinking.accept(new ThinkingStep(
-                    "query_rewrite", "查询改写",
+                    ThinkingStepType.QUERY_REWRITE.getCode(), "查询改写",
                     rewrittenQuery, System.currentTimeMillis()));
         }
 

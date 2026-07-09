@@ -3,6 +3,7 @@ package cn.kong.zbrain.service.impl;
 import cn.kong.zbrain.cache.ChatContextCache;
 import cn.kong.zbrain.dto.response.IntentResult;
 import cn.kong.zbrain.enums.ChatIntent;
+import cn.kong.zbrain.enums.PromptKey;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.service.IntentService;
 import cn.kong.zbrain.service.SysPromptService;
@@ -57,7 +58,7 @@ public class IntentServiceImpl implements IntentService {
 
         // 第二层：LLM 意图分类
         try {
-            String promptTemplate = sysPromptService.getContent("intent_classify");
+            String promptTemplate = sysPromptService.getContent(PromptKey.INTENT_CLASSIFY.getCode());
             if (promptTemplate == null) {
                 log.warn("intent_classify 提示词未配置，默认 RAG");
                 return new IntentResult(ChatIntent.RAG, 0.5, "提示词未配置", ChatIntent.RAG);

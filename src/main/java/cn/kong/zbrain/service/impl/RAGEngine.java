@@ -11,6 +11,9 @@ import cn.kong.zbrain.entity.ChatSession;
 import cn.kong.zbrain.entity.Document;
 import cn.kong.zbrain.entity.PromptTemplate;
 import cn.kong.zbrain.enums.ChatIntent;
+import cn.kong.zbrain.enums.PromptKey;
+import cn.kong.zbrain.enums.SseEventType;
+import cn.kong.zbrain.enums.ThinkingStepType;
 import cn.kong.zbrain.llm.LLMService;
 import cn.kong.zbrain.mapper.DocumentMapper;
 import cn.kong.zbrain.service.ChatEngine;
@@ -144,7 +147,7 @@ public class RAGEngine implements ChatEngine {
             ChatSession session = helper.getOrCreateSession(request);
 
             // 思考过程回调
-            Consumer<ThinkingStep> onThinking = step -> helper.sendSseEvent(emitter, "thinking", step);
+            Consumer<ThinkingStep> onThinking = step -> helper.sendSseEvent(emitter, SseEventType.THINKING.getCode(), step);
 
             // 1. 查询预处理（Query 改写）
             QueryPreprocessService.PreprocessResult preprocess = queryPreprocessService.preprocess(
@@ -155,13 +158,13 @@ public class RAGEngine implements ChatEngine {
                     request.getKbId(), preprocess.vectorQuery(), preprocess.textQuery(), onThinking);
 
             // 3. 发送检索结果元信息
-            helper.sendSseEvent(emitter, "session", session.getId());
-            helper.sendSseEvent(emitter, "intent", "rag");
+            helper.sendSseEvent(emitter, SseEventType.SESSION.getCode(), session.getId());
+            helper.sendSseEvent(emitter, SseEventType.INTENT.getCode(), "rag");
 
             if (retrievalResults.isEmpty()) {
                 String noResultMsg = getNoResultMessage();
-                helper.sendSseEvent(emitter, "content", noResultMsg);
-                helper.sendSseEvent(emitter, "done", Map.of("costTimeMs", System.currentTimeMillis() - startTime));
+                helper.sendSseEvent(emitter, SseEventType.CONTENT.getCode(), noResultMsg);
+                helper.sendSseEvent(emitter, SseEventType.DONE.getCode(), Map.of("costTimeMs", System.currentTimeMillis() - startTime));
                 emitter.complete();
                 return;
             }
@@ -174,7 +177,7 @@ public class RAGEngine implements ChatEngine {
             String userPrompt = buildUserPrompt(template.getUserPrompt(), context.contextText(), request.getQuery());
 
             // 6. 发送引用信息（含文档名、内容片段与完整内容）
-            helper.sendSseEvent(emitter, "citations", context.citationMap().entrySet().stream()
+            helper.sendSseEvent(emitter, SseEventType.CITATIONS.getCode(), context.citationMap().entrySet().stream()
                     .map(e -> {
                         RetrievalResult r = e.getValue();
                         Map<String, Object> m = new HashMap<>();
@@ -209,7 +212,7 @@ public class RAGEngine implements ChatEngine {
 
             // 7. 发送生成开始思考步骤
             onThinking.accept(new ThinkingStep(
-                    "generation", "生成回答",
+                    ThinkingStepType.GENERATION.getCode(), "生成回答",
                     "模型: " + (request.getModelId() != null ? request.getModelId() : "默认模型"),
                     System.currentTimeMillis()));
 
@@ -224,7 +227,7 @@ public class RAGEngine implements ChatEngine {
                     Boolean.TRUE.equals(request.getThinking()),
                     chunk -> {
                         fullAnswer.append(chunk);
-                        helper.sendSseEvent(emitter, "content", chunk);
+                        helper.sendSseEvent(emitter, SseEventType.CONTENT.getCode(), chunk);
                     },
                     usage -> usageRef.set(usage)
             );
@@ -262,12 +265,12 @@ public class RAGEngine implements ChatEngine {
                 doneData.put("completionTokens", usage.getCompletionTokens());
                 doneData.put("totalTokens", usage.getTotalTokens());
             }
-            helper.sendSseEvent(emitter, "done", doneData);
+            helper.sendSseEvent(emitter, SseEventType.DONE.getCode(), doneData);
             emitter.complete();
 
         } catch (Exception e) {
             log.error("RAG 引擎流式失败", e);
-            helper.sendSseEvent(emitter, "error", e.getMessage());
+            helper.sendSseEvent(emitter, SseEventType.ERROR.getCode(), e.getMessage());
             emitter.complete();
         }
     }
@@ -275,7 +278,7 @@ public class RAGEngine implements ChatEngine {
     // ==================== 内部方法 ====================
 
     private String getNoResultMessage() {
-        String noResultMsg = sysPromptService.getContent("no_result");
+        String noResultMsg = sysPromptService.getContent(PromptKey.NO_RESULT.getCode());
         if (noResultMsg == null) {
             noResultMsg = "抱歉，知识库中未找到与您问题相关的内容，请尝试更换问法或联系管理员补充知识。";
         }

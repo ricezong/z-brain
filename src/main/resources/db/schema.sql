@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS kb_document (
     file_type       VARCHAR(32),
     file_hash       VARCHAR(64),
     chunk_size      INT,                            -- 子块分块大小（Token 数），NULL 时使用知识库配置
+    parse_type      VARCHAR(32)   DEFAULT 'tika',   -- 解析方式：tika / llama_index
     status          VARCHAR(32)   DEFAULT 'pending',
     -- pending-待解析 / parsing-解析中 / pending_review-待审核
     -- embedding-向量化中 / success-完成 / failed-失败
@@ -87,6 +88,7 @@ CREATE TABLE IF NOT EXISTS kb_document (
 COMMENT ON TABLE  kb_document IS '文档表';
 COMMENT ON COLUMN kb_document.status IS '文档状态机：pending/parsing/pending_review/embedding/success/failed';
 COMMENT ON COLUMN kb_document.chunk_size IS '子块分块大小（Token 数），NULL 时使用知识库的 chunk_size';
+COMMENT ON COLUMN kb_document.parse_type IS '解析方式：tika-本地Tika解析 / llama_index-LlamaIndex Cloud解析';
 
 CREATE INDEX IF NOT EXISTS idx_kb_doc_kbid ON kb_document(kb_id);
 CREATE INDEX IF NOT EXISTS idx_kb_doc_status ON kb_document(status);
@@ -245,7 +247,24 @@ COMMENT ON COLUMN sys_llm_model.is_default IS '是否为该 model_type 的默认
 CREATE INDEX IF NOT EXISTS idx_sys_llm_type ON sys_llm_model(model_type);
 CREATE INDEX IF NOT EXISTS idx_sys_llm_default ON sys_llm_model(model_type, is_default);
 
--- 为 sys_prompt 和 sys_llm_model 也添加 update_time 触发器
+-- ==================== 外部 API 配置表 ====================
+-- 通用配置表，按 config_type 区分不同外部服务
+CREATE TABLE IF NOT EXISTS sys_api_config (
+    id            BIGSERIAL    PRIMARY KEY,
+    config_type   VARCHAR(32)  NOT NULL UNIQUE,       -- 配置类型：llama_index / 其他第三方服务
+    enabled       BOOLEAN      DEFAULT TRUE,
+    api_key       VARCHAR(256),                       -- API Key
+    base_url      VARCHAR(512),                       -- API Base URL
+    config        JSONB                               -- 专属配置（JSON），如 {"tier":"AGENTIC"}
+);
+COMMENT ON TABLE  sys_api_config IS '外部 API 配置表（按 config_type 区分不同服务）';
+COMMENT ON COLUMN sys_api_config.config_type IS '配置类型标识：llama_index / 其他第三方服务';
+COMMENT ON COLUMN sys_api_config.enabled IS '是否启用该服务';
+COMMENT ON COLUMN sys_api_config.api_key IS 'API Key';
+COMMENT ON COLUMN sys_api_config.base_url IS 'API Base URL';
+COMMENT ON COLUMN sys_api_config.config IS '专属配置（JSON），如 LlamaIndex 的 {"tier":"AGENTIC"}';
+
+-- 为 sys_prompt、sys_llm_model 添加 update_time 触发器
 DO $$
 DECLARE
     tbl TEXT;
@@ -467,6 +486,33 @@ VALUES (
     0
 )
 ON CONFLICT DO NOTHING;
+
+-- 小米对话模型
+INSERT INTO sys_llm_model (name, model_type, provider, model_name, api_key, base_url, temperature, max_tokens, is_default, is_active, sort_order)
+VALUES (
+    'XiaoMi 对话模型',
+    'chat',
+    'openai_compatible',
+    'mimo-v2.5-pro',
+    'tp-cty0u6ahqoq0go57j4jngss3nj3mdimqmyqae7kauupilw2g',
+    'https://token-plan-cn.xiaomimimo.com',
+    0.3,
+    4096,
+    FALSE,
+    TRUE,
+    0
+)
+ON CONFLICT DO NOTHING;
+
+-- ==================== 初始化外部 API 配置数据 ====================
+-- LlamaIndex Cloud 解析配置
+INSERT INTO sys_api_config (config_type, enabled, api_key, base_url, config)
+SELECT 'llama_index',
+       TRUE,
+       'llx-mEpMFEoBrnhwZow0q1blHBeCXheiEGBcFHxdL2qkHSuUXQAk',
+       'https://api.cloud.llamaindex.ai',
+       '{"tier":"AGENTIC"}'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM sys_api_config WHERE config_type = 'llama_index');
 
 -- ==================== 维护任务：定时 ANALYZE ====================
 -- 业务低峰期执行 ANALYZE 更新统计信息，保障 ivfflat 召回率

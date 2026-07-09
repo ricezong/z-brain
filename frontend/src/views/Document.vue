@@ -126,6 +126,13 @@
           <el-input-number v-model="uploadForm.chunkSize" :min="64" :max="1024" :step="32" placeholder="留空使用知识库默认" />
           <span class="upload-tip">留空使用知识库默认值</span>
         </el-form-item>
+        <el-form-item label="解析方式">
+          <el-radio-group v-model="uploadForm.parseType">
+            <el-radio value="tika">Tika（本地解析）</el-radio>
+            <el-radio value="llama_index">LlamaIndex（云端解析）</el-radio>
+          </el-radio-group>
+          <div class="upload-tip" style="margin-left: 0; margin-top: 4px">Tika 适用于所有格式且速度快；LlamaIndex 适合复杂版面/表格文档，需联网调用云端 API</div>
+        </el-form-item>
         <el-form-item label="文件" required>
           <el-upload
             ref="uploadRef"
@@ -179,7 +186,7 @@ const filters = reactive({
 })
 const pagination = reactive({ pageNum: 1, pageSize: 10 })
 
-const uploadForm = reactive({ kbId: '', chunkSize: null })
+const uploadForm = reactive({ kbId: '', chunkSize: null, parseType: 'tika' })
 
 async function loadList() {
   loading.value = true
@@ -279,12 +286,14 @@ async function handleUpload() {
     formData.append('kbId', uploadForm.kbId)
     formData.append('file', selectedFile.value)
     if (uploadForm.chunkSize) formData.append('chunkSize', uploadForm.chunkSize)
+    formData.append('parseType', uploadForm.parseType)
     const res = await uploadDocument(formData)
     ElMessage.success('上传成功，正在异步解析...')
     uploadDialogVisible.value = false
     selectedFile.value = null
     uploadForm.kbId = ''
     uploadForm.chunkSize = null
+    uploadForm.parseType = 'tika'
     loadList()
     // 开始轮询进度
     startProgressPolling(res.data)

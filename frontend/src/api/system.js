@@ -53,3 +53,15 @@ export function deleteLlmModel(id) {
 export function setDefaultLlmModel(id) {
   return request.put(`/system/llm-models/${id}/default`)
 }
+
+/** ==================== 外部 API 配置 ==================== **/
+
+/** 获取指定类型的 API 配置 */
+export function getApiConfig(configType) {
+  return request.get(`/system/api-config/${configType}`)
+}
+
+/** 更新指定类型的 API 配置 */
+export function updateApiConfig(configType, data) {
+  return request.put(`/system/api-config/${configType}`, data)
+}

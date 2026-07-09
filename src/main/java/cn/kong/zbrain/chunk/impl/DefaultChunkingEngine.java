@@ -6,7 +6,6 @@ import cn.kong.zbrain.chunk.ChunkingEngine;
 import cn.kong.zbrain.config.ZBrainProperties;
 import cn.kong.zbrain.entity.Chunk;
 import cn.kong.zbrain.enums.ChunkStatus;
-import cn.kong.zbrain.enums.ChunkType;
 import cn.kong.zbrain.util.RecursiveCharacterSplitter;
 import cn.kong.zbrain.util.TokenUtils;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +38,10 @@ import java.util.regex.Pattern;
 @Component
 @RequiredArgsConstructor
 public class DefaultChunkingEngine implements ChunkingEngine {
+
+    /** 分块类型常量 */
+    private static final String CHUNK_TYPE_PARENT = "parent";
+    private static final String CHUNK_TYPE_CHILD = "child";
 
     private static final Pattern MULTI_BLANK_LINES = Pattern.compile("\\n{3,}");
     private static final Pattern LINE_TRAILING_SPACES = Pattern.compile("(?m)\\s+$");
@@ -94,7 +97,7 @@ public class DefaultChunkingEngine implements ChunkingEngine {
             Chunk parent = new Chunk();
             parent.setDocId(docId);
             parent.setKbId(kbId);
-            parent.setChunkType(ChunkType.PARENT.getCode());
+            parent.setChunkType(CHUNK_TYPE_PARENT);
             String cleanedParent = cleanContent(parentText);
             parent.setContent(cleanedParent);
             parent.setTokenCount(TokenUtils.countTokens(cleanedParent));
@@ -172,7 +175,7 @@ public class DefaultChunkingEngine implements ChunkingEngine {
             child.setDocId(docId);
             child.setKbId(kbId);
             child.setParentId(parentId);
-            child.setChunkType(ChunkType.CHILD.getCode());
+            child.setChunkType(CHUNK_TYPE_CHILD);
             String cleaned = cleanContent(childText);
             child.setContent(cleaned);
             child.setTokenCount(TokenUtils.countTokens(cleaned));

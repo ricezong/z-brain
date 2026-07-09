@@ -1,6 +1,7 @@
 package cn.kong.zbrain.cache;
 
 import cn.kong.zbrain.config.ZBrainProperties;
+import cn.kong.zbrain.enums.ChatRole;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -42,11 +43,11 @@ public class ChatContextCache {
      * 单条对话消息
      */
     public record ChatMessage(String role, String content) {
-        public static ChatMessage user(String content) {
-            return new ChatMessage("user", content);
+        public static ChatMessage    user(String content) {
+            return new ChatMessage(ChatRole.USER.getCode(), content);
         }
         public static ChatMessage assistant(String content) {
-            return new ChatMessage("assistant", content);
+            return new ChatMessage(ChatRole.ASSISTANT.getCode(), content);
         }
     }
 
