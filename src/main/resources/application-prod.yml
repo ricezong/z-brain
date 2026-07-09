@@ -30,4 +30,4 @@ spring:
 logging:
   level:
     root: INFO
-    com.zbrain: INFO
+    cn.kong.zbrain: INFO
