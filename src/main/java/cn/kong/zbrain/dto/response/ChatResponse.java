@@ -42,8 +42,10 @@ public class ChatResponse {
         private Long docId;
         /** 文档名称 */
         private String docName;
-        /** 引用片段内容 */
+        /** 引用片段内容（截断摘要） */
         private String snippet;
+        /** 引用完整内容（父块内容，用于弹窗展示） */
+        private String fullContent;
         /** 页码 */
         private Integer page;
     }

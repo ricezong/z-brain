@@ -1,12 +1,13 @@
 <template>
   <div class="chat-page">
     <!-- 左侧最近对话栏 -->
-    <div class="chat-sidebar">
+    <div class="chat-sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="new-chat-tab" @click="newChat">
+        <el-icon class="new-chat-icon"><Plus /></el-icon>
+        <span class="new-chat-text">新对话</span>
+      </div>
       <div class="sidebar-header">
         <h3 class="sidebar-title">最近对话</h3>
-        <button class="new-chat-btn" @click="newChat" title="新建对话">
-          <el-icon><Plus /></el-icon>
-        </button>
       </div>
       <div class="session-list">
         <div v-if="sessionList.length === 0" class="session-empty">暂无对话记录</div>
@@ -28,6 +29,12 @@
 
     <!-- 右侧对话区 -->
     <div class="chat-main">
+      <!-- 顶栏：折叠按钮 -->
+      <div class="chat-toolbar">
+        <button class="sidebar-toggle-btn" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'">
+          <el-icon><Expand v-if="sidebarCollapsed" /><Fold v-else /></el-icon>
+        </button>
+      </div>
       <div class="message-list" ref="messageListRef">
         <!-- 欢迎消息 -->
         <div v-if="messages.length === 0" class="welcome-screen">
@@ -203,25 +210,16 @@
                 </div>
               </el-popover>
 
-              <!-- 知识库选择（仅 ask 模式） -->
-              <el-popover v-if="chatForm.mode === 'ask'" v-model:visible="kbPopoverVisible" trigger="click" placement="top-start" :width="220" popper-class="chat-tool-popover">
+              <!-- 知识库选择 -->
+              <el-popover v-model:visible="kbPopoverVisible" trigger="click" placement="top-start" :width="auto" popper-class="chat-tool-popover kb-popover">
                 <template #reference>
                   <button class="tool-icon-btn" :class="{ active: chatForm.kbId }" title="选择知识库">
                     <el-icon><Reading /></el-icon>
                     <span v-if="currentKbName" class="model-name-label">{{ currentKbName }}</span>
-                    <span v-else class="model-name-label">全局</span>
+                    <el-icon v-if="chatForm.kbId" class="kb-clear-icon" @click.stop="clearKb"><Close /></el-icon>
                   </button>
                 </template>
                 <div class="tool-popover-list">
-                  <div
-                    class="tool-popover-item"
-                    :class="{ active: !chatForm.kbId }"
-                    @click="selectKb('')"
-                  >
-                    <el-icon><Reading /></el-icon>
-                    <span class="tool-item-name">全局检索</span>
-                    <el-icon v-if="!chatForm.kbId" class="tool-item-check"><Select /></el-icon>
-                  </div>
                   <div
                     v-for="kb in kbList" :key="kb.id"
                     class="tool-popover-item"
@@ -230,7 +228,17 @@
                   >
                     <el-icon><Reading /></el-icon>
                     <span class="tool-item-name">{{ kb.name }}</span>
-                    <el-icon v-if="kb.id === chatForm.kbId" class="tool-item-check"><Select /></el-icon>
+                    <div class="tool-item-actions">
+                      <el-icon class="tool-item-detail" @click.stop="goToKbDetail(kb.id)"><ArrowRight /></el-icon>
+                      <el-icon v-if="kb.id === chatForm.kbId" class="tool-item-check"><Select /></el-icon>
+                    </div>
+                  </div>
+                  <div v-if="kbList.length === 0" class="kb-empty-hint">暂无知识库</div>
+                  <div class="kb-create-section">
+                    <button class="kb-create-btn" @click="goToCreateKb">
+                      <el-icon><FolderAdd /></el-icon>
+                      <span>去创建知识库</span>
+                    </button>
                   </div>
                 </div>
               </el-popover>
@@ -239,7 +247,10 @@
               <el-popover v-model:visible="modelPopoverVisible" trigger="click" placement="top-start" :width="200" popper-class="chat-tool-popover">
                 <template #reference>
                   <button class="tool-icon-btn" :class="{ active: chatForm.modelId }" title="选择模型">
-                    <el-icon><Cpu /></el-icon>
+                    <svg class="brain-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
+                      <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
+                    </svg>
                     <span v-if="currentModel" class="model-name-label">{{ currentModel.modelName }}</span>
                   </button>
                 </template>
@@ -266,13 +277,13 @@
                   :class="{ active: chatForm.thinking }"
                   @click="chatForm.thinking = !chatForm.thinking"
                 >
-                  <svg class="thinking-icon" viewBox="0 0 24 24" width="17" height="17"
+                  <svg class="thinking-icon" viewBox="0 0 24 24" width="16" height="16"
                     :fill="chatForm.thinking ? 'currentColor' : 'none'"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                   >
-                    <path d="M9 18h6" />
-                    <path d="M10 22h4" />
-                    <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+                    <path d="M12 8v4"/>
+                    <path d="M10 10h4"/>
                   </svg>
                 </button>
               </el-tooltip>
@@ -285,7 +296,11 @@
                   :disabled="!inputText.trim() || streaming"
                   @click="rewriteInput"
                 >
-                  <el-icon><MagicStick /></el-icon>
+                  <svg class="optimize-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m12 19-7-7 7-7 7 7-7 7z"/>
+                    <path d="M12 5v14"/>
+                    <path d="M5 12h14"/>
+                  </svg>
                 </button>
               </el-tooltip>
 
@@ -342,13 +357,14 @@
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  User, Refresh, Timer, MagicStick, Promotion, EditPen,
+  User, Refresh, Timer, Promotion, EditPen,
   Document, Reading, CopyDocument, RefreshRight, VideoPause, Aim,
   Cpu, ChatDotRound, Select,
-  Paperclip, ChatDotSquare, Operation, Close, Plus,
-  Search, ArrowDown
+Paperclip, ChatDotSquare, Operation, Close, Plus,
+Search, ArrowDown, Fold, Expand, ArrowRight, FolderAdd
 } from '@element-plus/icons-vue'
 import MarkdownView from '@/components/MarkdownView.vue'
+import { useRouter, useRoute } from 'vue-router'
 import { chatStream, rewriteQuery, getChatConfig, listSessions, deleteSession, getSessionMessages } from '@/api/chat'
 import { listKnowledgeBases } from '@/api/knowledgeBase'
 import { getPromptTemplateByKbId, getDefaultPromptTemplate } from '@/api/promptTemplate'
@@ -357,6 +373,7 @@ const messageListRef = ref(null)
 const inputText = ref('')
 const streaming = ref(false)
 const rewriting = ref(false)
+const sidebarCollapsed = ref(false)
 const kbList = ref([])
 const modelList = ref([])
 const modeList = ref([])
@@ -364,8 +381,10 @@ const modePopoverVisible = ref(false)
 const modelPopoverVisible = ref(false)
 const kbPopoverVisible = ref(false)
 const sessionList = ref([])
+const router = useRouter()
+const route = useRoute()
 /** 模式图标映射 */
-const modeIconMap = { ask: ChatDotSquare, agent: Operation }
+const modeIconMap = { ask: ChatDotRound, agent: Operation }
 const currentTemplate = ref(null)
 const abortController = ref(null)
 
@@ -396,7 +415,7 @@ const currentKbName = computed(() => {
 
 /** 当前工作模式图标 */
 const currentWorkModeIcon = computed(() => {
-  return modeIconMap[chatForm.mode] || ChatDotSquare
+  return modeIconMap[chatForm.mode] || ChatDotRound
 })
 
 /** 将前端工作模式映射为后端 mode */
@@ -408,20 +427,40 @@ function getBackendMode() {
 
 /** 选择工作模式 */
 function selectWorkMode(mode) {
-  chatForm.mode = mode
-  if (mode === 'agent') {
-    chatForm.kbId = ''
-    currentTemplate.value = null
-    modePopoverVisible.value = false
-  }
+chatForm.mode = mode
+if (mode === 'agent') {
+chatForm.kbId = ''
+currentTemplate.value = null
+}
+modePopoverVisible.value = false
+}
+
+/** 取消选中知识库 */
+function clearKb() {
+chatForm.kbId = ''
+onKbChange('')
+kbPopoverVisible.value = false
+}
+
+/** 跳转知识库详情 */
+function goToKbDetail(kbId) {
+kbPopoverVisible.value = false
+router.push({ path: '/documents', query: { kbId } })
+}
+
+/** 跳转知识库创建页面 */
+function goToCreateKb() {
+kbPopoverVisible.value = false
+router.push('/knowledge-bases')
 }
 
 /** 选择知识库 */
 function selectKb(kbId) {
-  chatForm.kbId = kbId
-  onKbChange(kbId)
-  kbPopoverVisible.value = false
+chatForm.kbId = kbId
+onKbChange(kbId)
+setTimeout(() => { kbPopoverVisible.value = false }, 150)
 }
+
 
 /** 选择模型 */
 function selectModel(modelId) {
@@ -471,13 +510,14 @@ const suggestions = [
 
 
 /** 处理气泡内点击（事件委托）— 引用徽章弹出详情 / 代码块复制 */
-function handleBubbleClick(event) {
+function handleBubbleClick(event, citations) {
   const target = event.target
   // 引用徽章点击
   if (target.classList?.contains('citation-ref')) {
     const label = target.getAttribute('data-citation')
     if (label) {
-      const cite = citationLookup[label]
+      // 优先从当前消息的 citations 中查找，兜底使用全局 citationLookup
+      const cite = citations?.find(c => c.label === label) || citationLookup[label]
       if (cite) {
         activeCitation.value = cite
         citationDialogVisible.value = true
@@ -534,6 +574,8 @@ function startStreaming(query, aiMsg) {
         const { type, data } = msg
         if (type === 'session') {
           chatForm.sessionId = data
+          // 同步会话 ID 到 URL，刷新后可恢复
+          router.replace({ name: 'ChatSession', params: { sessionId: data } })
         } else if (type === 'content') {
           aiMsg.content += data
           scrollToBottom()
@@ -697,6 +739,8 @@ function clearChat() {
 /** 新建对话 */
 function newChat() {
   clearChat()
+  // 回到无 session 的路由
+  router.replace({ name: 'Chat' })
 }
 
 /** 加载会话列表 */
@@ -712,6 +756,8 @@ async function loadSession(session) {
   if (streaming.value) return
   clearChat()
   chatForm.sessionId = session.id
+  // 同步会话 ID 到 URL
+  router.replace({ name: 'ChatSession', params: { sessionId: session.id } })
   // 恢复该会话的知识库选择
   chatForm.kbId = session.kbId || ''
   if (session.kbId) {
@@ -724,8 +770,9 @@ async function loadSession(session) {
     const logs = res.data || []
     logs.forEach(log => {
       messages.value.push({ role: 'user', content: log.query })
-      // 从 meta JSON 恢复元信息
+      // 从 meta JSON 恢复元信息与引用列表
       let meta = null
+      let citations = []
       if (log.meta) {
         try {
           const tu = typeof log.meta === 'string' ? JSON.parse(log.meta) : log.meta
@@ -736,11 +783,18 @@ async function loadSession(session) {
           if (tu.completionTokens != null) meta.completionTokens = tu.completionTokens
           if (tu.totalTokens != null) meta.totalTokens = tu.totalTokens
           if (tu.costTimeMs != null) meta.costTimeMs = tu.costTimeMs
+          // 恢复引用列表，并重建 citationLookup 映射表
+          if (Array.isArray(tu.citations) && tu.citations.length > 0) {
+            citations = tu.citations
+            tu.citations.forEach(c => {
+              if (c.label) citationLookup[c.label] = c
+            })
+          }
         } catch { /* ignore */ }
       }
       messages.value.push({
         role: 'assistant', content: log.answer || '', loading: false,
-        citations: [], meta, thinking: { steps: [] }
+        citations, meta, thinking: { steps: [] }
       })
     })
     scrollToBottom(true)
@@ -787,10 +841,21 @@ async function loadChatConfig() {
   } catch { /* ignore */ }
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadKbList()
   loadChatConfig()
-  loadSessionList()
+  await loadSessionList()
+  // 从 URL 路径参数恢复会话
+  const sessionId = route.params.sessionId
+  if (sessionId) {
+    const session = sessionList.value.find(s => s.id === sessionId)
+    if (session) {
+      loadSession(session)
+    } else {
+      // 会话不存在，回到无 session 路由
+      router.replace({ name: 'Chat' })
+    }
+  }
 })
 </script>
 
@@ -799,21 +864,29 @@ onMounted(() => {
 
 /* ==================== 侧边会话栏 ==================== */
 .chat-sidebar {
-  width: 280px; background: var(--bg-card); border-right: 1px solid var(--border-light);
-  display: flex; flex-direction: column; flex-shrink: 0;
+width: 280px; background: var(--bg-card); border-right: 1px solid var(--border-light);
+display: flex; flex-direction: column; flex-shrink: 0;
+transition: width 0.3s ease, opacity 0.2s ease;
+overflow: hidden;
 }
+.chat-sidebar.collapsed {
+width: 0; opacity: 0; border-right: none;
+}
+.new-chat-tab {
+display: flex; align-items: center; gap: 8px;
+margin: 12px 12px 0; padding: 10px 14px;
+border-radius: 10px; cursor: pointer;
+background: var(--primary-gradient-soft); color: var(--primary);
+font-size: 14px; font-weight: 600;
+transition: all 0.2s;
+}
+.new-chat-tab:hover { background: var(--primary); color: #fff; }
+.new-chat-icon { font-size: 18px; }
+.new-chat-text { white-space: nowrap; }
 .sidebar-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px 12px;
+padding: 18px 20px 12px;
 }
-.sidebar-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 0; }
-.new-chat-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 8px;
-  color: var(--text-secondary); background: transparent;
-  border: none; cursor: pointer; transition: all 0.2s;
-}
-.new-chat-btn:hover { color: var(--primary); background: var(--primary-gradient-soft); }
+.sidebar-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 0; }
 .session-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
 .session-empty {
   text-align: center; font-size: 13px; color: var(--text-placeholder);
@@ -844,6 +917,17 @@ onMounted(() => {
 
 /* ==================== 对话主区 ==================== */
 .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.chat-toolbar {
+height: 44px; flex-shrink: 0; display: flex; align-items: center;
+padding: 0 12px; border-bottom: 1px solid var(--border-light);
+}
+.sidebar-toggle-btn {
+display: inline-flex; align-items: center; justify-content: center;
+width: 32px; height: 32px; border-radius: 8px;
+border: none; background: transparent; cursor: pointer;
+color: var(--text-secondary); transition: all 0.2s;
+}
+.sidebar-toggle-btn:hover { color: var(--primary); background: var(--bg-hover); }
 .message-list { flex: 1; overflow-y: auto; padding: 32px; }
 
 /* ==================== 欢迎屏 ==================== */
@@ -1193,12 +1277,14 @@ onMounted(() => {
 
 /* --- 通用图标按钮 --- */
 .tool-icon-btn {
-  position: relative;
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 32px; height: 32px; padding: 0 6px; border-radius: 8px;
-  color: var(--text-secondary); background: transparent;
-  border: none; cursor: pointer; transition: all 0.2s;
+position: relative;
+display: inline-flex; align-items: center; justify-content: center;
+min-width: 32px; height: 32px; padding: 0 6px; border-radius: 8px;
+color: var(--text-secondary); background: transparent;
+border: none; cursor: pointer; transition: all 0.2s;
 }
+.brain-icon { flex-shrink: 0; }
+.optimize-icon { flex-shrink: 0; }
 .tool-icon-btn:hover:not(:disabled) {
   color: var(--text-primary); background: var(--bg-hover);
 }
@@ -1211,6 +1297,8 @@ onMounted(() => {
   font-size: 12px; font-weight: 500; margin-left: 2px;
   white-space: nowrap;
 }
+.kb-clear-icon { font-size: 14px; color: var(--text-placeholder); margin-left: 2px; cursor: pointer; transition: color 0.15s; }
+.kb-clear-icon:hover { color: var(--danger); }
 .tool-icon-btn.spinning .el-icon { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -1315,6 +1403,25 @@ onMounted(() => {
 .tool-item-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
 .tool-popover-item.active .tool-item-name { color: var(--primary); }
 .tool-item-check { color: var(--primary); font-size: 16px; margin-left: auto; }
+.tool-item-actions .tool-item-check { margin-left: 0; }
+
+/* 知识库弹窗：宽度自适应 */
+.kb-popover { min-width: 180px; max-width: 280px; }
+.kb-popover .tool-item-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 知识库弹窗：空状态 + 创建区域 */
+.kb-empty-hint { text-align: center; font-size: 13px; color: var(--text-placeholder); padding: 16px 0; }
+.kb-create-section { padding: 8px 4px 4px; margin-top: 4px; border-top: 1px solid var(--border-light); }
+.kb-create-btn {
+display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+padding: 0 12px; height: 34px; border-radius: 8px;
+border: 1px dashed var(--border-medium); cursor: pointer; font-size: 13px; font-weight: 500;
+background: transparent; color: var(--text-secondary); transition: all 0.2s;
+}
+.kb-create-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--bg-hover); }
+.tool-item-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.tool-item-detail { font-size: 14px; color: var(--text-placeholder); padding: 2px; border-radius: 4px; transition: all 0.2s; }
+.tool-item-detail:hover { color: var(--primary); background: var(--bg-hover); }
 
 /* 工作模式弹窗 */
 .mode-item-icon { font-size: 17px; color: var(--text-secondary); flex-shrink: 0; }

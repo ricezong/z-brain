@@ -123,7 +123,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="分块大小">
-          <el-input-number v-model="uploadForm.chunkSize" :min="64" :max="1024" :step="32" placeholder="留空使用知识库默认" />
+          <el-input-number v-model="uploadForm.chunkSize" :min="64" :max="1024" :step="32" />
           <span class="upload-tip">留空使用知识库默认值</span>
         </el-form-item>
         <el-form-item label="解析方式">

@@ -38,6 +38,12 @@ const routes = [
         meta: { title: '智能问答', icon: 'ChatDotRound' }
       },
       {
+        path: 'chat/session/:sessionId',
+        name: 'ChatSession',
+        component: () => import('@/views/Chat.vue'),
+        meta: { title: '智能问答', icon: 'ChatDotRound' }
+      },
+      {
         path: 'prompt-templates',
         name: 'PromptTemplate',
         component: () => import('@/views/PromptTemplate.vue'),

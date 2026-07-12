@@ -176,39 +176,11 @@ public class RAGEngine implements ChatEngine {
             PromptTemplate template = getPromptTemplate(request.getKbId());
             String userPrompt = buildUserPrompt(template.getUserPrompt(), context.contextText(), request.getQuery());
 
-            // 6. 发送引用信息（含文档名、内容片段与完整内容）
-            helper.sendSseEvent(emitter, SseEventType.CITATIONS.getCode(), context.citationMap().entrySet().stream()
-                    .map(e -> {
-                        RetrievalResult r = e.getValue();
-                        Map<String, Object> m = new HashMap<>();
-                        m.put("label", "doc_" + e.getKey());
-                        m.put("chunkId", r.getChunkId());
-                        m.put("docId", r.getDocId());
-                        Document doc = documentMapper.selectById(r.getDocId());
-                        if (doc != null) {
-                            m.put("docName", doc.getFileName());
-                        }
-                        String childContent = r.getContent();
-                        if (childContent != null && childContent.length() > 300) {
-                            childContent = childContent.substring(0, 300) + "...";
-                        }
-                        m.put("snippet", childContent != null ? childContent : "");
-                        String fullContent = r.getParentContent() != null
-                                ? r.getParentContent() : r.getContent();
-                        m.put("fullContent", fullContent != null ? fullContent : "");
-                        if (r.getMetadata() != null) {
-                            try {
-                                Map<?, ?> meta = objectMapper.readValue(r.getMetadata(), Map.class);
-                                Object page = meta.get("page");
-                                if (page instanceof Number n) {
-                                    m.put("page", n.intValue());
-                                }
-                            } catch (Exception ignored) {
-                            }
-                        }
-                        return m;
-                    })
-                    .toList());
+            // 6. 构建引用列表（SSE 发送 + 日志持久化共用）
+            List<ChatResponse.Citation> citationList = buildCitationList(context.citationMap());
+
+            // 发送引用信息（含文档名、内容片段与完整内容）
+            helper.sendSseEvent(emitter, SseEventType.CITATIONS.getCode(), citationList);
 
             // 7. 发送生成开始思考步骤
             onThinking.accept(new ThinkingStep(
@@ -243,7 +215,7 @@ public class RAGEngine implements ChatEngine {
             logResponse.setQuery(request.getQuery());
             logResponse.setRewrittenQuery(preprocess.rewrittenQuery());
             logResponse.setAnswer(fullAnswer.toString());
-            logResponse.setCitations(new ArrayList<>());
+            logResponse.setCitations(citationList);
             logResponse.setHitChunkIds(retrievalResults.stream().map(RetrievalResult::getChunkId).toList());
             logResponse.setCostTimeMs(System.currentTimeMillis() - startTime);
             logResponse.setIntent("rag");
@@ -341,7 +313,7 @@ public class RAGEngine implements ChatEngine {
     }
 
     /**
-     * 解析引用标记并映射为前端可点击的引用
+     * 解析引用标记并映射为前端可点击的引用（仅返回回答中实际引用的）
      */
     private List<ChatResponse.Citation> extractCitations(String answer,
                                                           Map<Integer, RetrievalResult> citationMap) {
@@ -351,29 +323,55 @@ public class RAGEngine implements ChatEngine {
             int index = Integer.parseInt(matcher.group(1));
             RetrievalResult result = citationMap.get(index);
             if (result != null) {
-                ChatResponse.Citation citation = new ChatResponse.Citation();
-                citation.setLabel("doc_" + index);
-                citation.setChunkId(result.getChunkId());
-                citation.setDocId(result.getDocId());
-                Document doc = documentMapper.selectById(result.getDocId());
-                if (doc != null) {
-                    citation.setDocName(doc.getFileName());
-                }
-                citation.setSnippet(result.getContent());
-                if (result.getMetadata() != null) {
-                    try {
-                        Map<?, ?> meta = objectMapper.readValue(result.getMetadata(), Map.class);
-                        Object page = meta.get("page");
-                        if (page instanceof Number n) {
-                            citation.setPage(n.intValue());
-                        }
-                    } catch (Exception ignored) {
-                    }
-                }
-                citations.add(citation);
+                citations.add(buildSingleCitation(index, result));
             }
         }
         return citations;
+    }
+
+    /**
+     * 根据检索结果构建完整引用列表（用于 SSE 推送和日志持久化）
+     */
+    private List<ChatResponse.Citation> buildCitationList(Map<Integer, RetrievalResult> citationMap) {
+        List<ChatResponse.Citation> citations = new ArrayList<>();
+        citationMap.forEach((index, result) -> citations.add(buildSingleCitation(index, result)));
+        return citations;
+    }
+
+    /**
+     * 构建单个引用对象
+     */
+    private ChatResponse.Citation buildSingleCitation(int index, RetrievalResult result) {
+        ChatResponse.Citation citation = new ChatResponse.Citation();
+        citation.setLabel("doc_" + index);
+        citation.setChunkId(result.getChunkId());
+        citation.setDocId(result.getDocId());
+        Document doc = documentMapper.selectById(result.getDocId());
+        if (doc != null) {
+            citation.setDocName(doc.getFileName());
+        }
+        // snippet：子块内容摘要（截断至 300 字符）
+        String childContent = result.getContent();
+        if (childContent != null && childContent.length() > 300) {
+            childContent = childContent.substring(0, 300) + "...";
+        }
+        citation.setSnippet(childContent != null ? childContent : "");
+        // fullContent：父块完整内容（用于弹窗展示）
+        String fullContent = result.getParentContent() != null
+                ? result.getParentContent() : result.getContent();
+        citation.setFullContent(fullContent != null ? fullContent : "");
+        // page：从元数据中解析页码
+        if (result.getMetadata() != null) {
+            try {
+                Map<?, ?> meta = objectMapper.readValue(result.getMetadata(), Map.class);
+                Object page = meta.get("page");
+                if (page instanceof Number n) {
+                    citation.setPage(n.intValue());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return citation;
     }
 
     /**

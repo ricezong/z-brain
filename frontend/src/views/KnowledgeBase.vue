@@ -19,23 +19,27 @@
         placeholder="搜索知识库名称"
         clearable
         style="width: 220px"
-        @keyup.enter="loadList"
+        @input="debouncedSearch"
+        @clear="reloadList"
       >
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
-      <el-select v-model="filters.category" placeholder="分类" clearable style="width: 160px" @change="loadList">
+      <el-select v-model="filters.category" placeholder="分类" clearable style="width: 140px" @change="reloadList">
         <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
       </el-select>
-      <el-select v-model="filters.status" placeholder="状态" clearable style="width: 120px" @change="loadList">
+      <el-select v-model="filters.status" placeholder="状态" clearable style="width: 100px" @change="reloadList">
         <el-option label="启用" value="active" />
         <el-option label="停用" value="inactive" />
       </el-select>
-      <el-button type="primary" plain @click="loadList">查询</el-button>
-      <el-button @click="resetFilters">重置</el-button>
     </div>
 
-    <!-- 知识库卡片网格 -->
-    <div v-loading="loading" class="card-grid">
+    <!-- 知识库卡片网格（无限滚动） -->
+    <div
+      ref="scrollContainerRef"
+      class="card-grid kb-scroll-container"
+      v-loading="loading"
+      @scroll="onScroll"
+    >
       <div class="kb-card" v-for="item in list" :key="item.id" @click="goToDocs(item)">
         <div class="kb-card-header">
           <div class="kb-icon">
@@ -86,19 +90,16 @@
         <el-icon class="empty-icon"><FolderOpened /></el-icon>
         <p class="empty-text">暂无知识库，点击右上角创建</p>
       </div>
-    </div>
 
-    <!-- 分页 -->
-    <el-pagination
-      v-if="total > 0"
-      v-model:current-page="pagination.pageNum"
-      v-model:page-size="pagination.pageSize"
-      :total="total"
-      :page-sizes="[10, 20, 50]"
-      layout="total, sizes, prev, pager, next"
-      @size-change="loadList"
-      @current-change="loadList"
-    />
+      <!-- 加载更多提示 -->
+      <div v-if="loadingMore" class="load-more-hint">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>加载中...</span>
+      </div>
+      <div v-if="noMore && list.length > 0" class="load-more-hint">
+        <span>已加载全部</span>
+      </div>
+    </div>
 
     <!-- 创建/编辑对话框 -->
     <el-dialog
@@ -114,8 +115,17 @@
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请输入描述（可选）" maxlength="200" show-word-limit />
         </el-form-item>
-        <el-form-item label="分类">
-          <el-input v-model="form.category" placeholder="请输入分类（可选）" />
+        <el-form-item label="分类" prop="category">
+          <el-select
+            v-model="form.category"
+            placeholder="请选择或输入分类"
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+          >
+            <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
+          </el-select>
         </el-form-item>
         <el-form-item label="分块大小" prop="chunkSize">
           <el-input-number v-model="form.chunkSize" :min="64" :max="1024" :step="32" />
@@ -142,9 +152,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import {
   listKnowledgeBases,
   createKnowledgeBase,
@@ -157,6 +168,7 @@ import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
 const loading = ref(false)
+const loadingMore = ref(false)
 const submitting = ref(false)
 const list = ref([])
 const total = ref(0)
@@ -165,9 +177,24 @@ const templateList = ref([])
 const dialogVisible = ref(false)
 const editingId = ref(null)
 const formRef = ref(null)
+const scrollContainerRef = ref(null)
+
+const PAGE_SIZE = 10
 
 const filters = reactive({ name: '', category: '', status: '' })
-const pagination = reactive({ pageNum: 1, pageSize: 10 })
+const pageNum = ref(1)
+
+/** 防抖搜索 */
+let searchTimer = null
+function debouncedSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    reloadList()
+  }, 300)
+}
+
+/** 是否已加载全部 */
+const noMore = computed(() => list.value.length >= total.value && total.value > 0)
 
 const form = reactive({
   name: '',
@@ -180,21 +207,55 @@ const form = reactive({
 
 const rules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
+  category: [{ required: true, message: '请选择或输入分类', trigger: 'change' }],
   chunkSize: [{ required: true, message: '请输入分块大小', trigger: 'blur' }]
 }
 
-async function loadList() {
+/** 首次加载 / 筛选后重新加载 */
+async function reloadList() {
+  pageNum.value = 1
   loading.value = true
   try {
     const res = await listKnowledgeBases({
       ...filters,
-      pageNum: pagination.pageNum,
-      pageSize: pagination.pageSize
+      pageNum: pageNum.value,
+      pageSize: PAGE_SIZE
     })
     list.value = res.data?.list || []
     total.value = res.data?.total || 0
   } finally {
     loading.value = false
+  }
+}
+
+/** 滚动加载下一页 */
+async function loadMore() {
+  if (loadingMore.value || loading.value || noMore.value) return
+  loadingMore.value = true
+  pageNum.value++
+  try {
+    const res = await listKnowledgeBases({
+      ...filters,
+      pageNum: pageNum.value,
+      pageSize: PAGE_SIZE
+    })
+    const newItems = res.data?.list || []
+    list.value.push(...newItems)
+    total.value = res.data?.total || total.value
+  } catch {
+    pageNum.value--
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+/** 滚动事件 */
+function onScroll() {
+  const el = scrollContainerRef.value
+  if (!el) return
+  const { scrollTop, scrollHeight, clientHeight } = el
+  if (scrollHeight - scrollTop - clientHeight < 80) {
+    loadMore()
   }
 }
 
@@ -212,13 +273,6 @@ async function loadTemplates() {
   } catch { /* ignore */ }
 }
 
-function resetFilters() {
-  filters.name = ''
-  filters.category = ''
-  filters.status = ''
-  pagination.pageNum = 1
-  loadList()
-}
 
 function openCreateDialog() {
   editingId.value = null
@@ -251,7 +305,7 @@ async function submitForm() {
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
-    loadList()
+    reloadList()
     loadCategories()
   } finally {
     submitting.value = false
@@ -262,7 +316,7 @@ async function handleDelete(item) {
   await ElMessageBox.confirm(`确定删除知识库「${item.name}」吗？`, '提示', { type: 'warning' })
   await deleteKnowledgeBase(item.id)
   ElMessage.success('删除成功')
-  loadList()
+  reloadList()
   loadCategories()
 }
 
@@ -276,9 +330,13 @@ function handleCommand(cmd, item) {
 }
 
 onMounted(() => {
-  loadList()
+  reloadList()
   loadCategories()
   loadTemplates()
+})
+
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
 
@@ -291,8 +349,13 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
-.card-grid {
+/* 无限滚动容器 */
+.kb-scroll-container {
   min-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 4px 4px 4px;
+  margin: -4px -4px 0 -4px;
 }
 
 .kb-card {
@@ -417,5 +480,17 @@ onMounted(() => {
 .empty-text {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+/* 加载更多提示 */
+.load-more-hint {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 0;
+  font-size: 13px;
+  color: var(--text-placeholder);
 }
 </style>

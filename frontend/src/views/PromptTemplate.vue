@@ -4,7 +4,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">提示词模板</h1>
-        <p class="page-subtitle">配置系统提示词与用户提示词，支持知识库级别定制</p>
+        <p class="page-subtitle">配置 RAG 回答的系统提示词与用户提示词，支持知识库级别定制</p>
       </div>
       <el-button type="primary" round @click="openCreateDialog">
         <el-icon><Plus /></el-icon>

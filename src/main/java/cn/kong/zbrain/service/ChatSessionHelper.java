@@ -170,6 +170,10 @@ public class ChatSessionHelper {
                 metaMap.put("completionTokens", response.getTokenMeta().getCompletionTokens());
                 metaMap.put("totalTokens", response.getTokenMeta().getTotalTokens());
             }
+            // 引用列表持久化（供前端刷新后恢复可点击引用）
+            if (response.getCitations() != null && !response.getCitations().isEmpty()) {
+                metaMap.put("citations", response.getCitations());
+            }
             logEntry.setMeta(objectMapper.writeValueAsString(metaMap));
             logEntry.setCostTimeMs(response.getCostTimeMs());
 

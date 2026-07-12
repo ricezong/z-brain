@@ -58,15 +58,15 @@
       </div>
     </div>
 
-    <!-- 技术架构概览 -->
+    <!-- 使用指南 -->
     <div class="section-header">
-      <h2 class="section-title">技术架构</h2>
+      <h2 class="section-title">使用指南</h2>
     </div>
-    <div class="arch-grid">
-      <div class="arch-card" v-for="arch in architectures" :key="arch.title">
-        <div class="arch-number">{{ arch.num }}</div>
-        <h3 class="arch-title">{{ arch.title }}</h3>
-        <p class="arch-desc">{{ arch.desc }}</p>
+    <div class="guide-grid">
+      <div class="guide-card" v-for="step in guideSteps" :key="step.title">
+        <div class="guide-number">{{ step.num }}</div>
+        <h3 class="guide-title">{{ step.title }}</h3>
+        <p class="guide-desc">{{ step.desc }}</p>
       </div>
     </div>
   </div>
@@ -86,18 +86,15 @@ const statCards = ref([
 ])
 
 const features = [
-  { title: '知识库管理', desc: '创建、配置和管理知识库，支持分类与分块策略配置', icon: 'Collection', gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)', path: '/knowledge-bases' },
-  { title: '文档管理', desc: '上传多种格式文档，实时跟踪解析进度，支持向量化触发', icon: 'Document', gradient: 'linear-gradient(135deg, #06b6d4, #3b82f6)', path: '/documents' },
-  { title: '分块审核', desc: '人工审核分块结果，支持合并、拆分、编辑与父子关系调整', icon: 'Files', gradient: 'linear-gradient(135deg, #f59e0b, #f97316)', path: '/documents' },
   { title: '智能问答', desc: '基于 RAG 的流式问答，支持 Query 改写与引用溯源', icon: 'ChatDotRound', gradient: 'linear-gradient(135deg, #10b981, #06b6d4)', path: '/chat' },
-  { title: '提示词模板', desc: '灵活配置系统提示词与用户提示词，支持知识库级别定制', icon: 'EditPen', gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)', path: '/prompt-templates' }
+  { title: '知识库管理', desc: '创建、配置和管理知识库，支持分类与分块策略配置', icon: 'Collection', gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)', path: '/knowledge-bases' }
 ]
 
-const architectures = [
-  { num: '01', title: '文档解析', desc: 'LlamaIndex Cloud 智能解析 PDF，Tika 解析其余格式，支持版面与表格识别' },
-  { num: '02', title: '语义分块', desc: 'Markdown 语义边界父块 + 递归字符子块，父子双层索引结构' },
-  { num: '03', title: '多路召回', desc: '向量检索 + 全文检索 + 模糊匹配，RRF 融合排序后 Rerank 精排' },
-  { num: '04', title: 'Query 改写', desc: '利用 LLM 改写查询增强检索，多轮对话指代消解提升上下文理解效果' }
+const guideSteps = [
+  { num: '01', title: '创建知识库', desc: '新建知识库并配置分类、分块策略，定义知识边界' },
+  { num: '02', title: '上传文档', desc: '上传 PDF、Word 等文档，系统自动完成解析、分块与向量化' },
+  { num: '03', title: '配置提示词', desc: '按需定制系统提示词与用户提示词，适配不同知识库的问答风格' },
+  { num: '04', title: '开始问答', desc: '进入智能问答，基于知识库获得带引用溯源的精准回答' }
 ]
 
 onMounted(async () => {
@@ -297,13 +294,13 @@ onMounted(async () => {
   transform: translateX(4px);
 }
 
-/* ==================== 技术架构 ==================== */
-.arch-grid {
+/* ==================== 使用指南 ==================== */
+.guide-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 20px;
 }
-.arch-card {
+.guide-card {
   background: var(--bg-card);
   border-radius: var(--radius-md);
   padding: 28px 24px;
@@ -312,7 +309,7 @@ onMounted(async () => {
   position: relative;
   overflow: hidden;
 }
-.arch-card::before {
+.guide-card::before {
   content: '';
   position: absolute;
   top: 0;
@@ -323,10 +320,10 @@ onMounted(async () => {
   opacity: 0;
   transition: opacity 0.3s;
 }
-.arch-card:hover::before {
+.guide-card:hover::before {
   opacity: 1;
 }
-.arch-number {
+.guide-number {
   font-size: 28px;
   font-weight: 800;
   background: var(--primary-gradient);
@@ -335,13 +332,13 @@ onMounted(async () => {
   background-clip: text;
   margin-bottom: 12px;
 }
-.arch-title {
+.guide-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 8px;
 }
-.arch-desc {
+.guide-desc {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.7;

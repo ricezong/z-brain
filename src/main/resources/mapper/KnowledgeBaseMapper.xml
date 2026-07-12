@@ -62,7 +62,7 @@
         <where>
             status != 'archived'
             <if test="name != null and name != ''">
-                AND name LIKE CONCAT('%', #{name}, '%')
+                AND name LIKE '%' || #{name} || '%'
             </if>
             <if test="category != null and category != ''">
                 AND category = #{category}
@@ -80,7 +80,7 @@
         <where>
             status != 'archived'
             <if test="name != null and name != ''">
-                AND name LIKE CONCAT('%', #{name}, '%')
+                AND name LIKE '%' || #{name} || '%'
             </if>
             <if test="category != null and category != ''">
                 AND category = #{category}

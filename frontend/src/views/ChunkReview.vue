@@ -2,17 +2,23 @@
   <div class="page-container">
     <!-- 页头 -->
     <div class="page-header">
-      <div>
-        <div class="back-row">
-          <el-button link @click="$router.push('/documents')">
-            <el-icon><ArrowLeft /></el-icon> 返回文档列表
-          </el-button>
+      <div class="review-header-left">
+        <el-button circle text class="back-btn" @click="$router.push('/documents')">
+          <el-icon size="20"><ArrowLeft /></el-icon>
+        </el-button>
+        <div>
+          <h1 class="page-title">分块审核</h1>
+          <p class="page-subtitle" v-if="docInfo">{{ docInfo.fileName }} · 共 {{ chunks.length }} 个分块</p>
         </div>
-        <h1 class="page-title">分块审核</h1>
-        <p class="page-subtitle" v-if="docInfo">{{ docInfo.fileName }} · 共 {{ chunks.length }} 个分块</p>
       </div>
       <div class="header-actions">
-        <el-button round @click="submitReviewDialog = true">
+        <el-tag v-if="modifiedChunks.length" type="warning" effect="plain" round size="small">
+          <el-icon><EditPen /></el-icon> {{ modifiedChunks.length }} 处修改
+        </el-tag>
+        <el-tag v-if="deletedIds.length" type="danger" effect="plain" round size="small">
+          <el-icon><Delete /></el-icon> {{ deletedIds.length }} 处删除
+        </el-tag>
+        <el-button type="primary" round :disabled="!modifiedChunks.length && !deletedIds.length" @click="submitReviewDialog = true">
           <el-icon><Check /></el-icon>
           提交审核
         </el-button>
@@ -340,8 +346,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.back-row {
-  margin-bottom: 8px;
+.review-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.back-btn {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.back-btn:hover {
+  color: var(--primary);
 }
 .header-actions {
   display: flex;

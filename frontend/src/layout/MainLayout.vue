@@ -3,9 +3,9 @@
     <!-- 顶部导航栏 -->
     <header class="navbar">
       <div class="navbar-inner">
-        <!-- 左侧：Logo + 导航菜单 -->
+        <!-- 左侧：Logo（首页入口） -->
         <div class="navbar-left">
-          <div class="navbar-logo">
+          <router-link to="/dashboard" class="navbar-logo">
             <svg viewBox="0 0 48 48" width="32" height="32">
               <defs>
                 <linearGradient id="logoG" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -18,27 +18,43 @@
               <circle cx="24" cy="20" r="3" fill="#6366f1"/>
             </svg>
             <span class="logo-text">Z-Brain</span>
-          </div>
-
-          <nav class="navbar-menu">
-            <router-link
-              v-for="item in menuItems"
-              :key="item.path"
-              :to="item.path"
-              class="menu-item"
-              :class="{ active: isActive(item.path) }"
-            >
-              <el-icon class="menu-icon"><component :is="item.icon" /></el-icon>
-              <span class="menu-text">{{ item.title }}</span>
-            </router-link>
-          </nav>
+          </router-link>
         </div>
 
-        <!-- 右侧：用户头像 -->
+        <!-- 中间：导航菜单 -->
+        <nav class="navbar-menu">
+          <router-link
+            v-for="item in menuItems"
+            :key="item.path"
+            :to="item.path"
+            class="menu-item"
+            :class="{ active: isActive(item.path) }"
+          >
+            <el-icon class="menu-icon"><component :is="item.icon" /></el-icon>
+            <span class="menu-text">{{ item.title }}</span>
+          </router-link>
+        </nav>
+
+        <!-- 右侧：系统管理下拉 + 用户头像 -->
         <div class="navbar-right">
-          <div class="avatar-wrapper">
-            <div class="avatar">Z</div>
-          </div>
+          <el-dropdown trigger="click" placement="bottom-end" popper-class="avatar-dropdown" @command="handleCommand">
+            <div class="avatar-wrapper">
+              <div class="avatar">Z</div>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>系统管理</el-dropdown-item>
+                <el-dropdown-item :command="'/prompt-templates'">
+                  <el-icon><EditPen /></el-icon>
+                  提示词模板
+                </el-dropdown-item>
+                <el-dropdown-item :command="'/system-config'">
+                  <el-icon><Setting /></el-icon>
+                  系统配置
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </header>
@@ -56,17 +72,16 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { EditPen, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 
 const menuItems = [
-  { path: '/dashboard', title: '工作台', icon: 'Odometer' },
-  { path: '/knowledge-bases', title: '知识库管理', icon: 'Collection' },
-  { path: '/documents', title: '文档管理', icon: 'Document' },
   { path: '/chat', title: '智能问答', icon: 'ChatDotRound' },
-  { path: '/prompt-templates', title: '提示词模板', icon: 'EditPen' },
-  { path: '/system-config', title: '系统配置', icon: 'Setting' }
+  { path: '/knowledge-bases', title: '知识库管理', icon: 'DataBoard' },
+  { path: '/documents', title: '文档管理', icon: 'Document' }
 ]
 
 const currentTitle = computed(() => {
@@ -75,6 +90,10 @@ const currentTitle = computed(() => {
 
 function isActive(path) {
   return route.path.startsWith(path)
+}
+
+function handleCommand(path) {
+  router.push(path)
 }
 </script>
 
@@ -98,16 +117,20 @@ function isActive(path) {
 
 .navbar-inner {
   height: 100%;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 0 24px;
 }
 
 .navbar-left {
   display: flex;
   align-items: center;
-  gap: 32px;
+  justify-self: start;
+}
+
+.navbar-menu {
+  justify-self: center;
 }
 
 /* Logo */
@@ -115,6 +138,12 @@ function isActive(path) {
   display: flex;
   align-items: center;
   gap: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.navbar-logo:hover {
+  opacity: 0.8;
 }
 .logo-text {
   font-size: 18px;
@@ -132,6 +161,7 @@ function isActive(path) {
   align-items: center;
   gap: 4px;
 }
+
 
 .menu-item {
   display: flex;
@@ -175,11 +205,14 @@ function isActive(path) {
 .navbar-right {
   display: flex;
   align-items: center;
+  justify-self: end;
   gap: 16px;
 }
 .avatar-wrapper {
   display: flex;
   align-items: center;
+  cursor: pointer;
+  outline: none;
 }
 .avatar {
   width: 36px;
@@ -192,10 +225,9 @@ function isActive(path) {
   justify-content: center;
   font-size: 16px;
   font-weight: 700;
-  cursor: pointer;
   transition: transform 0.2s;
 }
-.avatar:hover {
+.avatar-wrapper:hover .avatar {
   transform: scale(1.05);
 }
 
@@ -204,5 +236,12 @@ function isActive(path) {
   flex: 1;
   overflow-y: auto;
   background: var(--bg-page);
+}
+</style>
+
+<!-- 非 scoped 样式：控制 teleport 到 body 的下拉菜单 -->
+<style>
+.avatar-dropdown .el-popper__arrow {
+  display: none !important;
 }
 </style>
