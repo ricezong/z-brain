@@ -38,6 +38,12 @@ const routes = [
         meta: { title: '智能问答', icon: 'ChatDotRound' }
       },
       {
+        path: 'agent',
+        name: 'AgentChat',
+        component: () => import('@/views/AgentChat.vue'),
+        meta: { title: '灵犀助手', icon: 'MagicStick' }
+      },
+      {
         path: 'chat/session/:sessionId',
         name: 'ChatSession',
         component: () => import('@/views/Chat.vue'),

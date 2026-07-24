@@ -3,7 +3,7 @@
     <!-- 欢迎横幅 -->
     <div class="hero-banner">
       <div class="hero-content">
-        <h1 class="hero-title">欢迎使用 Z-Brain 智能知识库</h1>
+        <h1 class="hero-title">欢迎使用 Lingxi 智能知识库</h1>
         <p class="hero-desc">基于 RAG 架构的知识管理与智能问答平台，支持多格式文档解析、语义分块、多路召回与精准问答</p>
         <div class="hero-actions">
           <el-button type="primary" size="large" round @click="$router.push('/chat')">

@@ -46,7 +46,7 @@
               <circle cx="24" cy="20" r="3" fill="#6366f1"/>
             </svg>
           </div>
-          <h2 class="welcome-title">Z-Brain 智能问答</h2>
+          <h2 class="welcome-title">Lingxi 智能问答</h2>
           <p class="welcome-desc">基于知识库的 RAG 智能问答，支持多路召回与引用溯源</p>
           <div class="welcome-suggestions">
             <div v-for="s in suggestions" :key="s" class="suggestion-chip" @click="sendMessage(s)">{{ s }}</div>

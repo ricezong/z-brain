@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.kong.eon.persistence.mapper.ChatMessageMapper">
+
+    <resultMap id="BaseResultMap" type="cn.kong.eon.persistence.entity.ChatMessage">
+        <id     column="id"              property="id"/>
+        <result column="conversation_id" property="conversationId"/>
+        <result column="type"            property="type"/>
+        <result column="content"         property="content"/>
+        <result column="msg_time"        property="msgTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, conversation_id, type, content, msg_time
+    </sql>
+
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO chat_message (conversation_id, type, content, msg_time)
+        VALUES
+        <foreach collection="list" item="msg" separator=",">
+            (#{msg.conversationId}, #{msg.type}, #{msg.content}, #{msg.msgTime})
+        </foreach>
+    </insert>
+
+    <select id="selectByConversationId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM chat_message
+        WHERE conversation_id = #{conversationId}
+        ORDER BY id ASC
+    </select>
+
+    <delete id="deleteByConversationId">
+        DELETE FROM chat_message WHERE conversation_id = #{conversationId}
+    </delete>
+
+    <update id="updateContentById">
+        UPDATE chat_message SET content = #{content} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteByIds">
+        DELETE FROM chat_message WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="selectDistinctConversationIds" resultType="java.lang.String">
+        SELECT DISTINCT conversation_id FROM chat_message
+    </select>
+
+</mapper>
+

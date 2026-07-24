@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="cn.kong.zbrain.mapper.ChunkMapper">
+<mapper namespace="cn.kong.eon.persistence.mapper.ChunkMapper">
 
-    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.Chunk">
+    <resultMap id="BaseResultMap" type="cn.kong.eon.persistence.entity.Chunk">
         <id     column="id"               property="id"/>
         <result column="doc_id"           property="docId"/>
         <result column="kb_id"            property="kbId"/>
@@ -10,6 +10,7 @@
         <result column="chunk_type"       property="chunkType"/>
         <result column="content"          property="content"/>
         <result column="content_vector"   property="contentVector"/>
+        <result column="content_hash"     property="contentHash"/>
         <result column="tsv"              property="tsv"/>
         <result column="token_count"      property="tokenCount"/>
         <result column="status"           property="status"/>
@@ -19,18 +20,27 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, doc_id, kb_id, parent_id, chunk_type, content, content_vector, tsv,
+        id, doc_id, kb_id, parent_id, chunk_type, content, content_vector, content_hash, tsv,
         token_count, status, metadata, create_time, update_time
     </sql>
 
-    <insert id="insert" parameterType="cn.kong.zbrain.entity.Chunk" useGeneratedKeys="true" keyProperty="id">
+    <!-- 瘦列列表：检索 SQL 不回传大字段（content_vector ~15-20KB + tsv） -->
+    <sql id="Skinny_Column_List">
+        id, parent_id, content, doc_id, kb_id, metadata
+    </sql>
+
+    <insert id="insert" parameterType="cn.kong.eon.persistence.entity.Chunk" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kb_chunk
-            (doc_id, kb_id, parent_id, chunk_type, content, content_vector, token_count, status, metadata)
+            (doc_id, kb_id, parent_id, chunk_type, content, content_vector, content_hash, token_count, status, metadata)
         VALUES
             (#{docId}, #{kbId}, #{parentId}, COALESCE(#{chunkType}, 'child'),
              #{content},
              <choose>
                  <when test="contentVector != null">#{contentVector}::vector</when>
+                 <otherwise>NULL</otherwise>
+             </choose>,
+             <choose>
+                 <when test="contentHash != null">#{contentHash}</when>
                  <otherwise>NULL</otherwise>
              </choose>,
              COALESCE(#{tokenCount}, 0), COALESCE(#{status}, 'draft'),
@@ -42,13 +52,13 @@
 
     <insert id="batchInsert" parameterType="java.util.List">
         INSERT INTO kb_chunk
-            (doc_id, kb_id, parent_id, chunk_type, content, content_vector, token_count, status, metadata)
+            (doc_id, kb_id, parent_id, chunk_type, content, content_hash, token_count, status, metadata)
         VALUES
         <foreach collection="list" item="c" separator=",">
             (#{c.docId}, #{c.kbId}, #{c.parentId}, COALESCE(#{c.chunkType}, 'child'),
              #{c.content},
              <choose>
-                 <when test="c.contentVector != null">#{c.contentVector}::vector</when>
+                 <when test="c.contentHash != null">#{c.contentHash}</when>
                  <otherwise>NULL</otherwise>
              </choose>,
              COALESCE(#{c.tokenCount}, 0), COALESCE(#{c.status}, 'draft'),
@@ -59,11 +69,12 @@
         </foreach>
     </insert>
 
-    <update id="update" parameterType="cn.kong.zbrain.entity.Chunk">
+    <update id="update" parameterType="cn.kong.eon.persistence.entity.Chunk">
         UPDATE kb_chunk
         <set>
             <if test="parentId != null">parent_id = #{parentId},</if>
             <if test="content != null">content = #{content},</if>
+            <if test="contentHash != null">content_hash = #{contentHash},</if>
             <if test="contentVector != null">content_vector = #{contentVector}::vector,</if>
             <if test="tokenCount != null">token_count = #{tokenCount},</if>
             <if test="status != null">status = #{status},</if>
@@ -79,13 +90,20 @@
     </update>
 
     <update id="updateVector">
-        UPDATE kb_chunk SET content_vector = #{vector}::vector WHERE id = #{id}
+        UPDATE kb_chunk SET content_vector = #{vector}::vector, status = 'active' WHERE id = #{id}
     </update>
 
+    <!-- 改为单条 UPDATE ... FROM (VALUES ...) 批量（替代 separator=";" 多语句） -->
     <update id="batchUpdateVector" parameterType="java.util.List">
-        <foreach collection="list" item="c" separator=";">
-            UPDATE kb_chunk SET content_vector = #{c.contentVector}::vector, status = #{c.status} WHERE id = #{c.id}
-        </foreach>
+        UPDATE kb_chunk SET
+            content_vector = v.vector::vector,
+            status = v.status
+        FROM (
+            <foreach collection="list" item="c" separator=" UNION ALL ">
+                SELECT #{c.id}::bigint AS id, #{c.contentVector}::text AS vector, #{c.status}::text AS status
+            </foreach>
+        ) AS v
+        WHERE kb_chunk.id = v.id
     </update>
 
     <update id="updateStatus">
@@ -153,10 +171,9 @@
         WHERE id = #{parentId} AND chunk_type = 'parent'
     </select>
 
-    <!-- ==================== 向量召回：基于 pgvector 余弦相似度 ==================== -->
-    <!-- kbId 为空时全局检索 -->
-    <select id="vectorRetrieve" resultMap="BaseResultMap">
-        SELECT <include refid="Base_Column_List"/>
+    <!-- ==================== 瘦向量召回：不回传 content_vector/tsv ==================== -->
+    <select id="vectorRetrieveSkinny" resultType="java.util.Map">
+        SELECT id, parent_id, content, doc_id, kb_id, metadata::text AS metadata
         FROM kb_chunk
         WHERE chunk_type = 'child'
           AND status = 'active'
@@ -168,15 +185,9 @@
         LIMIT #{topK}
     </select>
 
-    <!-- ==================== 全文召回：基于 zhparser 中文分词 ==================== -->
-    <!-- 使用 websearch_to_tsquery 替代 plainto_tsquery：
-         - 默认词间为 AND 逻辑，与 plainto_tsquery 一致
-         - 支持 OR 关键字（宽松匹配，提升召回率）
-         - 支持 "" 短语精确匹配
-         - 支持 - 排除词
-         - 对特殊字符更容错，不会因非法语法报错 -->
-    <select id="fulltextRetrieve" resultMap="BaseResultMap">
-        SELECT <include refid="Base_Column_List"/>,
+    <!-- ==================== 瘦全文召回：不回传 content_vector/tsv ==================== -->
+    <select id="fulltextRetrieveSkinny" resultType="java.util.Map">
+        SELECT id, parent_id, content, doc_id, kb_id, metadata::text AS metadata,
                ts_rank(tsv, websearch_to_tsquery('zh_cn', #{query})) AS rank
         FROM kb_chunk
         WHERE chunk_type = 'child'
@@ -187,6 +198,21 @@
           </if>
         ORDER BY rank DESC
         LIMIT #{topK}
+    </select>
+
+    <!-- ==================== 批量回填 parent.content + document.file_name（一条 JOIN，消灭 N+1） ==================== -->
+    <select id="batchFillParentAndDoc" resultType="java.util.Map">
+        SELECT
+            c.id AS chunk_id,
+            p.content AS parent_content,
+            d.file_name AS doc_name
+        FROM kb_chunk c
+        LEFT JOIN kb_chunk p ON c.parent_id = p.id AND p.chunk_type = 'parent'
+        LEFT JOIN kb_document d ON c.doc_id = d.id
+        WHERE c.id IN
+        <foreach collection="chunkIds" item="cid" open="(" separator="," close=")">
+            #{cid}
+        </foreach>
     </select>
 
     <select id="countByDocId" resultType="int">

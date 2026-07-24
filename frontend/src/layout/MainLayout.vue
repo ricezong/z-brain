@@ -17,7 +17,7 @@
               <path d="M16 14c0-1.1.9-2 2-2h8a8 8 0 0 1 0 16h-4v6a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V14z" fill="white" opacity="0.95"/>
               <circle cx="24" cy="20" r="3" fill="#6366f1"/>
             </svg>
-            <span class="logo-text">Z-Brain</span>
+            <span class="logo-text">灵犀 LingXi</span>
           </router-link>
         </div>
 
@@ -79,13 +79,14 @@ const route = useRoute()
 const router = useRouter()
 
 const menuItems = [
+  { path: '/agent', title: '灵犀助手', icon: 'MagicStick' },
   { path: '/chat', title: '智能问答', icon: 'ChatDotRound' },
   { path: '/knowledge-bases', title: '知识库管理', icon: 'DataBoard' },
   { path: '/documents', title: '文档管理', icon: 'Document' }
 ]
 
 const currentTitle = computed(() => {
-  return route.meta.title || 'Z-Brain'
+  return route.meta.title || 'Lingxi'
 })
 
 function isActive(path) {

@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="cn.kong.zbrain.mapper.DocumentMapper">
+<mapper namespace="cn.kong.eon.persistence.mapper.DocumentMapper">
 
-    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.Document">
+    <resultMap id="BaseResultMap" type="cn.kong.eon.persistence.entity.Document">
         <id     column="id"              property="id"/>
         <result column="kb_id"           property="kbId"/>
         <result column="file_name"       property="fileName"/>
@@ -27,7 +27,7 @@
         chunk_count, parse_progress, error_message, metadata, create_by, create_time, update_time
     </sql>
 
-    <insert id="insert" parameterType="cn.kong.zbrain.entity.Document" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insert" parameterType="cn.kong.eon.persistence.entity.Document" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kb_document
             (kb_id, file_name, file_path, file_size, file_type, file_hash, chunk_size, parse_type, status,
              chunk_count, parse_progress, error_message, metadata, create_by)
@@ -39,7 +39,7 @@
              COALESCE(#{createBy}, 'system'))
     </insert>
 
-    <update id="update" parameterType="cn.kong.zbrain.entity.Document">
+    <update id="update" parameterType="cn.kong.eon.persistence.entity.Document">
         UPDATE kb_document
         <set>
             <if test="fileName != null">file_name = #{fileName},</if>
@@ -77,10 +77,17 @@
         DELETE FROM kb_document WHERE id = #{id}
     </delete>
 
-    <select id="selectById" resultMap="BaseResultMap">
+        <select id="selectById" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM kb_document
         WHERE id = #{id}
+    </select>
+
+    <select id="selectByHash" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM kb_document
+        WHERE file_hash = #{fileHash}
+        LIMIT 1
     </select>
 
     <select id="selectByKbId" resultMap="BaseResultMap">
@@ -135,3 +142,4 @@
     </select>
 
 </mapper>
+

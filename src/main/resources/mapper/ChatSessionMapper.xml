@@ -1,69 +1,74 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="cn.kong.zbrain.mapper.ChatSessionMapper">
+<mapper namespace="cn.kong.eon.persistence.mapper.ChatSessionMapper">
 
-    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.ChatSession">
+    <resultMap id="BaseResultMap" type="cn.kong.eon.persistence.entity.ChatSession">
         <id     column="id"              property="id"/>
         <result column="kb_id"           property="kbId"/>
         <result column="title"           property="title"/>
         <result column="user_id"         property="userId"/>
         <result column="message_count"   property="messageCount"/>
+        <result column="mode"            property="mode"/>
+        <result column="current_task_id" property="currentTaskId"/>
         <result column="create_time"     property="createTime"/>
         <result column="update_time"     property="updateTime"/>
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, kb_id, title, user_id, message_count, create_time, update_time
+        id, kb_id, title, user_id, message_count, mode, current_task_id, create_time, update_time
     </sql>
 
-    <insert id="insert" parameterType="cn.kong.zbrain.entity.ChatSession">
-        INSERT INTO kb_chat_session
-            (id, kb_id, title, user_id, message_count)
+    <insert id="insert" parameterType="cn.kong.eon.persistence.entity.ChatSession">
+        INSERT INTO chat_session
+            (id, kb_id, title, user_id, message_count, mode)
         VALUES
-            (#{id}, #{kbId}, #{title}, COALESCE(#{userId}, 'anonymous'), COALESCE(#{messageCount}, 0))
+            (#{id}, #{kbId}, #{title}, COALESCE(#{userId}, 'anonymous'), COALESCE(#{messageCount}, 0), COALESCE(#{mode}, 'rag'))
     </insert>
 
-    <update id="update" parameterType="cn.kong.zbrain.entity.ChatSession">
-        UPDATE kb_chat_session
+    <update id="update" parameterType="cn.kong.eon.persistence.entity.ChatSession">
+        UPDATE chat_session
         <set>
             <if test="title != null">title = #{title},</if>
             <if test="userId != null">user_id = #{userId},</if>
+            <if test="mode != null">mode = #{mode},</if>
+            <if test="currentTaskId != null">current_task_id = #{currentTaskId},</if>
         </set>
         WHERE id = #{id}
     </update>
 
     <delete id="deleteById">
-        DELETE FROM kb_chat_session WHERE id = #{id}
+        DELETE FROM chat_session WHERE id = #{id}
     </delete>
 
     <select id="selectById" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
-        FROM kb_chat_session
+        FROM chat_session
         WHERE id = #{id}
     </select>
 
     <select id="selectByKbId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
-        FROM kb_chat_session
+        FROM chat_session
         WHERE kb_id = #{kbId}
         ORDER BY update_time DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <select id="countByKbId" resultType="long">
-        SELECT COUNT(1) FROM kb_chat_session WHERE kb_id = #{kbId}
+        SELECT COUNT(1) FROM chat_session WHERE kb_id = #{kbId}
     </select>
 
     <select id="selectByUserId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
-        FROM kb_chat_session
+        FROM chat_session
         WHERE user_id = #{userId}
         ORDER BY update_time DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <update id="incrementMessageCount">
-        UPDATE kb_chat_session SET message_count = message_count + 1 WHERE id = #{id}
+        UPDATE chat_session SET message_count = message_count + 1 WHERE id = #{id}
     </update>
 
 </mapper>
+

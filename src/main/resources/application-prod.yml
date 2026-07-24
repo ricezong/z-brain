@@ -11,7 +11,7 @@ spring:
       idle-timeout: 30000
       max-lifetime: 1800000
       connection-timeout: 30000
-      pool-name: ZBrainHikariPool
+      pool-name: eonHikariPool
 
   data:
     redis:
@@ -30,4 +30,4 @@ spring:
 logging:
   level:
     root: INFO
-    cn.kong.zbrain: INFO
+    cn.kong.eon: INFO

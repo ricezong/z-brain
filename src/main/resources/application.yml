@@ -15,7 +15,7 @@ server:
 
 spring:
   application:
-    name: z-brain
+    name: eon
   profiles:
     active: dev
   servlet:
@@ -33,7 +33,7 @@ spring:
 # ==================== MyBatis 配置 ====================
 mybatis:
   mapper-locations: classpath:mapper/*.xml
-  type-aliases-package: cn.kong.zbrain.entity
+  type-aliases-package: cn.kong.eon.persistence.entity
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: true
@@ -42,8 +42,8 @@ mybatis:
     default-statement-timeout: 30
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
-# ==================== Z-Brain 业务配置 ====================
-zbrain:
+# ==================== eon 业务配置 ====================
+eon:
   # 文档处理相关
   document:
     upload-dir: ./data/uploads
@@ -75,30 +75,48 @@ zbrain:
     citation-prefix: "doc_"
   # Redis Key 前缀与 TTL
   cache:
-    prefix: "zbrain:"
+    prefix: "eon:"
     doc-progress-ttl: 86400       # 1 天
     chat-context-ttl: 7200        # 2 小时
     embedding-ttl: 604800         # 7 天
-  # 百炼 SDK 运维参数
-  dashscope:
-    # 批量向量化每批最大条数（百炼 API 限制最多 10 条）
-    embedding-batch-size: 10
-    # 超时（毫秒）
-    timeout: 60000
-    # 重试次数
-    retry: 3
+  # ==================== Agent 个人助手 ====================
+  agent:
+    # workspace md 资产目录（Git 管理）
+    workspace-dir: ./workspace
+    context:
+      # 模型上下文窗口 Token 数（按当前默认模型）
+      window-tokens: 128000
+      # 四级水位线：SNIP 轻量裁剪 / PRUNE 占位替换 / COMPACT 增量摘要
+      snip-line: 0.60
+      prune-line: 0.80
+      compact-line: 0.95
+      # 保护区：最近 N token 不压缩
+      protect-tail-tokens: 8000
+      # 单条工具结果超过该字符数即外置落盘
+      artifact-threshold-chars: 8000
+      # artifact 外置存储目录
+      artifact-dir: ./data/artifacts
+    nudge:
+      # Memory 复盘触发回合数 / Skill 复盘触发工具迭代数
+      memory-turns: 10
+      skill-iters: 10
+    gate:
+      # 危险工具名单（触发前置审批）
+      dangerous-tools: execute_shell,write_file,send_email,delete_data
+      # 审批等待超时（秒）
+      approval-timeout-seconds: 600
 
 
 # ==================== 日志配置 ====================
 logging:
   level:
     root: INFO
-    cn.kong.zbrain: DEBUG
-    cn.kong.zbrain.mapper: INFO
+    cn.kong.eon: DEBUG
+    cn.kong.eon.persistence.mapper: INFO
     org.springframework.web: INFO
     org.mybatis: INFO
   file:
-    name: ./logs/z-brain.log
+    name: ./logs/eon.log
     max-size: 100MB
     max-history: 30
 

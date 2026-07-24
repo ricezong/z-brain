@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="cn.kong.zbrain.mapper.SysPromptMapper">
+<mapper namespace="cn.kong.eon.persistence.mapper.SysPromptMapper">
 
-    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.SysPrompt">
+    <resultMap id="BaseResultMap" type="cn.kong.eon.persistence.entity.SysPrompt">
         <id     column="id"          property="id"/>
         <result column="prompt_key"  property="promptKey"/>
         <result column="name"        property="name"/>
@@ -17,12 +17,12 @@
         id, prompt_key, name, description, content, is_active, create_time, update_time
     </sql>
 
-    <insert id="insert" parameterType="cn.kong.zbrain.entity.SysPrompt" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insert" parameterType="cn.kong.eon.persistence.entity.SysPrompt" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO sys_prompt (prompt_key, name, description, content, is_active)
         VALUES (#{promptKey}, #{name}, #{description}, #{content}, COALESCE(#{isActive}, TRUE))
     </insert>
 
-    <update id="update" parameterType="cn.kong.zbrain.entity.SysPrompt">
+    <update id="update" parameterType="cn.kong.eon.persistence.entity.SysPrompt">
         UPDATE sys_prompt
         <set>
             <if test="name != null">name = #{name},</if>
@@ -57,3 +57,4 @@
     </select>
 
 </mapper>
+

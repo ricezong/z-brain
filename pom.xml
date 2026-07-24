@@ -12,10 +12,10 @@
     </parent>
 
     <groupId>cn.kong</groupId>
-    <artifactId>z-brain</artifactId>
+    <artifactId>eon</artifactId>
     <version>1.0.0</version>
-    <name>z-brain</name>
-    <description>智多星知识库系统 (Z-Brain) - 基于 Spring AI 与阿里云百炼平台的企业级 RAG 知识库</description>
+    <name>eon</name>
+    <description>元</description>
 
     <properties>
         <java.version>17</java.version>
@@ -26,6 +26,7 @@
         <pgvector.version>0.1.6</pgvector.version>
         <hutool.version>5.8.27</hutool.version>
         <knife4j.version>4.5.0</knife4j.version>
+        <caffeine.version>3.1.8</caffeine.version>
     </properties>
 
     <dependencyManagement>
@@ -106,6 +107,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+
+        <!-- ==================== Caffeine 本地缓存（DB 化配置缓存层） ==================== -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>${caffeine.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
@@ -175,10 +183,17 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- ArchUnit：包依赖边界强制（方案第三章 ArchUnit 测试进构建） -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>1.3.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
-        <finalName>z-brain</finalName>
+        <finalName>eon</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

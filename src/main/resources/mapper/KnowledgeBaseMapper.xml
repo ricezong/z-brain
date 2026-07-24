@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="cn.kong.zbrain.mapper.KnowledgeBaseMapper">
+<mapper namespace="cn.kong.eon.persistence.mapper.KnowledgeBaseMapper">
 
-    <resultMap id="BaseResultMap" type="cn.kong.zbrain.entity.KnowledgeBase">
+    <resultMap id="BaseResultMap" type="cn.kong.eon.persistence.entity.KnowledgeBase">
         <id     column="id"                  property="id"/>
         <result column="name"                property="name"/>
         <result column="description"         property="description"/>
@@ -23,7 +23,7 @@
         create_by, update_by, create_time, update_time
     </sql>
 
-    <insert id="insert" parameterType="cn.kong.zbrain.entity.KnowledgeBase" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insert" parameterType="cn.kong.eon.persistence.entity.KnowledgeBase" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO kb_knowledge_base
             (name, description, category, prompt_template_id, chunk_size, status, doc_count, chunk_count, create_by, update_by)
         VALUES
@@ -32,7 +32,7 @@
              COALESCE(#{createBy}, 'system'), COALESCE(#{updateBy}, 'system'))
     </insert>
 
-    <update id="update" parameterType="cn.kong.zbrain.entity.KnowledgeBase">
+    <update id="update" parameterType="cn.kong.eon.persistence.entity.KnowledgeBase">
         UPDATE kb_knowledge_base
         <set>
             <if test="name != null">name = #{name},</if>
@@ -100,3 +100,4 @@
     </update>
 
 </mapper>
+

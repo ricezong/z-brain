@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan="true" scanPeriod="60 seconds">
 
-    <property name="LOG_PATH" value="./logs/z-brain.log"/>
+    <property name="LOG_PATH" value="./logs/eon.log"/>
     <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"/>
     <property name="LOG_FILE_PATTERN" value="%d{yyyy-MM-dd}.%i.log.gz"/>
 
@@ -17,7 +17,7 @@
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>./logs/z-brain-${LOG_FILE_PATTERN}</fileNamePattern>
+            <fileNamePattern>./logs/eon-${LOG_FILE_PATTERN}</fileNamePattern>
             <maxFileSize>100MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>10GB</totalSizeCap>
@@ -30,14 +30,14 @@
 
     <!-- 错误日志单独输出 -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>./logs/z-brain-error.log</file>
+        <file>./logs/eon-error.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <level>ERROR</level>
             <onMatch>ACCEPT</onMatch>
             <onMismatch>DENY</onMismatch>
         </filter>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>./logs/z-brain-error-${LOG_FILE_PATTERN}</fileNamePattern>
+            <fileNamePattern>./logs/eon-error-${LOG_FILE_PATTERN}</fileNamePattern>
             <maxFileSize>100MB</maxFileSize>
             <maxHistory>60</maxHistory>
             <totalSizeCap>5GB</totalSizeCap>
@@ -54,9 +54,9 @@
         <appender-ref ref="ERROR_FILE"/>
     </root>
 
-    <logger name="cn.kong.zbrain" level="DEBUG"/>
+    <logger name="cn.kong.eon" level="DEBUG"/>
     <!-- MyBatis Mapper SQL 日志，提升到 INFO 关闭控制台 SQL 输出 -->
-    <logger name="cn.kong.zbrain.mapper" level="INFO"/>
+    <logger name="cn.kong.eon.mapper" level="INFO"/>
     <logger name="org.springframework.web" level="INFO"/>
     <logger name="org.mybatis" level="INFO"/>
     <logger name="com.alibaba.dashscope" level="INFO"/>
