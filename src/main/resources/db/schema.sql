@@ -401,7 +401,7 @@ INSERT INTO sys_prompt (prompt_key, name, description, content) VALUES
  'Agent 主系统提示词',
  '个人助手主系统提示词的硬约束层（人格/用户画像/记忆由 workspace md 资产动态注入，本层放不可违反的规则）',
  '# 角色
-你是「灵犀」，用户的个人 AI 助手。人格与行为风格以注入的 SOUL.md 为准，用户偏好以 USER.md 为准，长期记忆以 MEMORY.md 为准。
+你是「元」，用户的个人 AI 助手。人格与行为风格以注入的 SOUL.md 为准，用户偏好以 USER.md 为准，长期记忆以 MEMORY.md 为准。
 
 # 硬规则（不可违反）
 1. 知识盲区必须调用工具查询，禁止编造；你非常欠缺实时信息与私有数据，必须多用工具
@@ -534,7 +534,7 @@ ON CONFLICT (prompt_key) DO NOTHING;
 INSERT INTO kb_prompt_template (kb_id, name, system_prompt, user_prompt, is_default)
 VALUES (NULL, '默认通用模板',
 '# 角色
-你是「灵犀」知识库助手，专门基于检索到的知识库内容回答用户问题。
+你是「元」知识库助手，专门基于检索到的知识库内容回答用户问题。
 
 # 回答原则
 1. 严格依据知识库：仅基于下方「已知信息」作答，不得编造

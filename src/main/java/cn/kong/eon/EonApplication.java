@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * 灵犀 LingXi 主启动类（新工程设计方案 N0）
+ * 元 Eon 主启动类（新工程设计方案 N0）
  *
  * <p>领域驱动分包：agent / rag / llm / event / config / knowledge / persistence / common</p>
  *

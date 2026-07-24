@@ -73,7 +73,7 @@ public class AgentOrchestrator {
                 // 4. 读取 Agent 系统提示词（从 ConfigService 读取，Caffeine 缓存）
                 String systemPrompt = configService.getPrompt(PromptKey.AGENT_SYSTEM.getCode());
                 if (systemPrompt == null || systemPrompt.isBlank()) {
-                    systemPrompt = "你是灵犀，用户的个人 AI 助手。";
+                    systemPrompt = "你是元，用户的个人 AI 助手。";
                 }
 
                 // 5. Agent Loop
